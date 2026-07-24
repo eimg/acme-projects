@@ -271,21 +271,63 @@ describe("acme-projects API", () => {
       .send({ columnId: "exploring", index: 0 })
       .expect(409);
     await request(app).delete(`/api/cards/${card.id}`).expect(409);
-    await request(app).delete(`/api/projects/${project.body.id}`).expect(409);
+    // Project wipe is allowed even with an active linked issue; Issues stays untouched.
+    await request(app).delete(`/api/projects/${project.body.id}`).expect(204);
+    await request(app).get(`/api/projects/${project.body.id}/board`).expect(404);
+    await request(app).get(`/api/cards/${card.id}`).expect(404);
+    assert.equal(remoteIssues.get(issueId)?.status, "open");
+
+    const project2 = await request(app)
+      .post("/api/projects")
+      .send({
+        name: "Integrated project again",
+        repositoryPath: "/workspace/product",
+        issuesUrl: "http://issues.test",
+      })
+      .expect(201);
+    const card2 = await request(app)
+      .post(`/api/projects/${project2.body.id}/cards`)
+      .send({ title: "Ship it again", description: "Retry", columnId: "ready" })
+      .expect(201);
+    const submitted2 = await request(app)
+      .post(`/api/cards/${card2.body.id}/submit-issue`)
+      .expect(201);
+    const issueId2 = submitted2.body.attempt.issueId as number;
 
     const returned = await request(app)
-      .post(`/api/cards/${card.id}/return-to-exploration`)
+      .post(`/api/cards/${card2.body.id}/return-to-exploration`)
       .expect(200);
 
-    assert.equal(remoteIssues.get(issueId)?.status, "closed");
+    assert.equal(remoteIssues.get(issueId2)?.status, "closed");
     assert.equal(returned.body.card.columnId, "exploring");
     assert.equal(returned.body.card.activeImplementation, undefined);
 
     const attempts = await request(app)
-      .get(`/api/cards/${card.id}/implementation-attempts`)
+      .get(`/api/cards/${card2.body.id}/implementation-attempts`)
       .expect(200);
     assert.equal(attempts.body.length, 1);
     assert.equal(attempts.body[0].status, "withdrawn");
+  });
+
+  it("submits a Ready card without a repository path", async () => {
+    const project = await request(app)
+      .post("/api/projects")
+      .send({
+        name: "Pathless project",
+        issuesUrl: "http://issues.test",
+      })
+      .expect(201);
+    assert.equal(project.body.repositoryPath, "");
+    const card = await createTestCard(project.body.id, "No path needed", "ready");
+
+    const submitted = await request(app)
+      .post(`/api/cards/${card.id}/submit-issue`)
+      .expect(201);
+
+    const issueId = submitted.body.attempt.issueId as number;
+    const issue = remoteIssues.get(issueId)!;
+    assert.doesNotMatch(issue.body, /Repository:/);
+    assert.match(issue.body, /Pathless project \/ ACM-/);
   });
 
   it("does not withdraw an issue after a human adds the trigger label", async () => {

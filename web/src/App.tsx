@@ -52,6 +52,7 @@ export function App() {
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
       showToast("Project deleted");
     },
+    onError: (error) => showToast(error.message),
   });
 
   return (
@@ -76,7 +77,11 @@ export function App() {
                 cardCount={board.data.columns.reduce((sum, column) => sum + column.cards.length, 0)}
                 onEdit={() => setDialog("edit-project")}
                 onDelete={() => {
-                  if (confirm(`Delete “${board.data.project.name}” and all of its cards?`)) {
+                  if (
+                    confirm(
+                      `Delete “${board.data.project.name}” and all of its cards?\n\nLinked Acme Issues are left alone; only this project board is removed.`,
+                    )
+                  ) {
                     deleteProject.mutate(board.data.project.id);
                   }
                 }}
@@ -222,14 +227,16 @@ function BoardHeader({
         <div className="eyebrow">Project board</div>
         <h1>{project.name}</h1>
         <p>{project.description || "A shared space for ideas, decisions, and implementation intent."}</p>
-        <div className={`repository-scope ${project.repositoryPath ? "" : "unset"}`}>
-          <RepoIcon />
-          {project.repositoryPath || "Repository not set"}
-        </div>
         <div className={`repository-scope ${project.issuesUrl ? "" : "unset"}`}>
           <LinkIcon />
           {project.issuesUrl || "Acme Issues not configured"}
         </div>
+        {project.repositoryPath ? (
+          <div className="repository-scope">
+            <RepoIcon />
+            {project.repositoryPath}
+          </div>
+        ) : null}
       </div>
       <div className="board-meta">
         <span>{cardCount} {cardCount === 1 ? "card" : "cards"}</span>
@@ -431,16 +438,22 @@ function NewProjectDialog({
         <Field label="Short description" hint="What space does this project create?">
           <textarea name="description" rows={3} placeholder="Explore a simpler way for customers to…" />
         </Field>
-        <Field label="Repository path" hint="Optional. Cards in this project inherit this future execution scope.">
-          <input name="repositoryPath" placeholder="/path/to/repository" />
-        </Field>
-        <Field label="Acme Issues URL" hint="Used only when you explicitly submit a Ready card.">
+        <Field
+          label="Acme Issues URL"
+          hint="Required to submit Ready cards. Helix runs against whichever workspace helix serve was started in."
+        >
           <input
             name="issuesUrl"
             type="url"
             defaultValue="http://127.0.0.1:8320"
             placeholder="http://127.0.0.1:8320"
           />
+        </Field>
+        <Field
+          label="Repository path"
+          hint="Optional later. Not used for today's Issues → Helix handoff."
+        >
+          <input name="repositoryPath" placeholder="/path/to/repository" />
         </Field>
         <FormError error={mutation.error} />
         <DialogActions onClose={onClose} submit="Create project" busy={mutation.isPending} />
@@ -502,7 +515,7 @@ function ProjectSettingsDialog({
         </Field>
         <Field
           label="Acme Issues URL"
-          hint="Submitting a Ready card creates a non-triggering issue at this service."
+          hint="Submitting a Ready card creates a non-triggering issue here. Helix runs in the Helix serve workspace."
         >
           <input
             name="issuesUrl"
@@ -516,7 +529,7 @@ function ProjectSettingsDialog({
         </Field>
         <Field
           label="Repository path"
-          hint="Optional until integration. Future implementation work will run in this repository."
+          hint="Optional later for multi-repo routing. Leave blank for the current single-Helix test flow."
         >
           <input
             name="repositoryPath"
@@ -524,10 +537,6 @@ function ProjectSettingsDialog({
             placeholder="/path/to/repository"
           />
         </Field>
-        <div className="scope-note">
-          <SparkIcon />
-          <span>One project, one repository. Cards inherit this path rather than selecting their own target.</span>
-        </div>
         <FormError error={mutation.error} />
         <DialogActions onClose={onClose} submit="Save settings" busy={mutation.isPending} />
       </form>
@@ -825,10 +834,7 @@ function ImplementationPanel({
     );
   }
 
-  const missing = [
-    !project.repositoryPath && "repository path",
-    !project.issuesUrl && "Acme Issues URL",
-  ].filter(Boolean);
+  const missing = [!project.issuesUrl && "Acme Issues URL"].filter(Boolean);
   return (
     <section className="implementation-panel">
       <div className="implementation-icon"><SendIcon /></div>
@@ -838,6 +844,7 @@ function ImplementationPanel({
         <p>
           This creates an Acme Issues issue labeled <code>acme-projects</code>.
           It will not trigger Helix until a human adds Acme Issues&apos; configured trigger label.
+          The run then uses the Helix instance Issues is pointed at (its serve workspace).
         </p>
         {missing.length > 0 && (
           <p className="configuration-warning">Set the {missing.join(" and ")} in Project settings first.</p>

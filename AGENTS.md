@@ -18,9 +18,9 @@ Acme Projects assumes a repository already exists. Brand-new project inception b
 ## Product boundaries
 
 - Cards are collaborative product intent, not issues.
-- One project represents one repository-backed exploration space. Cards inherit
-  the optional `repositoryPath`; do not add card-level repository overrides
-  without an explicit cross-repository use case.
+- `repositoryPath` is optional metadata for a later multi-repo Issues surface.
+  Today's Submit as issue → Acme Issues → Helix path uses the Helix serve
+  workspace; do not require a repository path for handoff.
 - The fixed flow is `Ideas → Exploring → Ready → In progress → In review → Done`.
 - `Ready` is the implementation handoff boundary. The current manual **Submit
   as issue** action creates an `acme-projects` issue without Acme Issues'

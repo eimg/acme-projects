@@ -69,9 +69,9 @@ Each card provides:
 - Acceptance notes
 - A chronological discussion
 
-Each project can optionally record one repository path. Every card inherits that
-scope. This keeps future Helix execution repository-local without requiring the
-standalone board to invoke Helix today.
+Each project can optionally record a repository path for later multi-repo
+routing. Today's handoff does not need it: Submit as issue → Acme Issues →
+Helix runs in whatever workspace `helix serve` was started in.
 
 This is not intended to become a general project-management platform. The focus is the conversation and decisions that turn an uncertain feature idea into implementable intent.
 
@@ -86,7 +86,8 @@ For manual testing, open the linked issue in Acme Issues and add its configured
 trigger label (normally `trigger`). Acme Issues then uses its existing Helix
 delivery path. Submission is refused if Acme Issues is configured to use
 `acme-projects` as its trigger label.
-Configure the repository path and Acme Issues URL in **Project settings**.
+Configure the Acme Issues URL in **Project settings** (repository path is
+optional and unused by the current Helix handoff).
 
 ```text
 Ready card

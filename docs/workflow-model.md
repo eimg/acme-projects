@@ -5,7 +5,7 @@ Automatic triggering and Helix/PR lifecycle projection are planned.
 
 Acme Projects owns collaborative feature intent for repositories that already
 exist. Brand-new project inception belongs to **Prelude**, which drafts freeform
-docs and exports bootstrap artifacts for a future Helix empty-workspace runtime;
+docs and exports bootstrap artifacts for Helix empty-workspace bootstrap;
 Prelude does not call Acme Projects, Acme Issues, or Helix today.
 
 Acme Issues owns concrete implementation issues and the human-facing
@@ -85,8 +85,10 @@ rather than pretending the external work stopped.
 
 ## Repository scope
 
-One Acme Projects project represents one repository-backed exploration space.
-Cards inherit the project's optional `repositoryPath`; they do not select
-independent repositories. When integration is enabled, Acme Issues and Helix
-use that repository identity for the implementation issue and repository-local
-run.
+One Acme Projects board is an exploration space. An optional `repositoryPath`
+may be stored for later multi-repo routing; cards do not pick their own path.
+
+Today's Submit as issue handoff does **not** route Helix by that path. Acme
+Issues triggers whichever Helix instance its webhook points at, and that Helix
+runs in its serve workspace. Keep `repositoryPath` for future multi-project
+Issues surfaces; leave it blank for the current single-Helix test flow.

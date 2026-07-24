@@ -28,7 +28,6 @@ import {
   listComments,
   listProjects,
   moveCard,
-  projectHasActiveImplementation,
   updateCard,
   updateProject,
   withdrawImplementationAttempt,
@@ -104,11 +103,6 @@ export function createApp({
 
   app.delete("/api/projects/:id", (req, res) => {
     const id = numberId(req.params.id);
-    if (projectHasActiveImplementation(db, id)) {
-      return res.status(409).json({
-        error: "Withdraw linked implementation issues before deleting this project",
-      });
-    }
     if (!deleteProject(db, id)) {
       return res.status(404).json({ error: "Project not found" });
     }
@@ -220,9 +214,6 @@ export function createApp({
       return res.status(409).json({ error: "This card already has an active implementation issue" });
     }
     const project = getProject(db, card.projectId)!;
-    if (!project.repositoryPath) {
-      return res.status(409).json({ error: "Set the project repository path before submitting" });
-    }
     if (!project.issuesUrl) {
       return res.status(409).json({ error: "Set the Acme Issues URL before submitting" });
     }

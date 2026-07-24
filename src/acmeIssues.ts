@@ -102,11 +102,11 @@ function formatImplementationSnapshot(project: Project, card: Card): string {
     "Generated from Acme Projects.",
     "",
     `Source: ${project.name} / ACM-${card.id}`,
-    `Repository: ${project.repositoryPath}`,
-    "",
-    "## Implementation brief",
-    card.description || card.title,
   ];
+  if (project.repositoryPath.trim()) {
+    sections.push(`Repository: ${project.repositoryPath}`);
+  }
+  sections.push("", "## Implementation brief", card.description || card.title);
   if (card.decisions) sections.push("", "## Decisions", card.decisions);
   if (card.openQuestions) sections.push("", "## Open questions", card.openQuestions);
   if (card.acceptanceNotes) sections.push("", "## Acceptance notes", card.acceptanceNotes);
