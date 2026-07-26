@@ -106,8 +106,10 @@ directly. See [`docs/workflow-model.md`](./docs/workflow-model.md).
 ```bash
 npm run dev           # serve with auto-restart; UI is served from web/ over HMR
 npm run dev:web       # standalone Vite development server; proxies /api to port 8330
-npm run build         # build server and browser UI
+npm run typecheck
 npm test              # API and persistence tests
+npm run build         # build server and browser UI
+npm run verify        # typecheck + test + build
 npm start             # run the compiled CLI
 ```
 

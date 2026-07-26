@@ -60,9 +60,4 @@ The current and intended contract is documented in
 3. Keep the app runnable without credentials, network access, Helix, Acme Issues, or GitHub.
 4. Keep the visual style light and distinct while retaining the typography and compact spacing conventions shared with Acme Issues.
 5. Preserve unrelated user changes.
-6. Before committing cross-cutting changes, run:
-
-```bash
-npm test
-npm run build
-```
+6. Before committing cross-cutting changes, run `npm run verify` (typecheck, test, and build).
