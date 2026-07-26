@@ -104,8 +104,8 @@ directly. See [`docs/workflow-model.md`](./docs/workflow-model.md).
 ## Commands
 
 ```bash
-npm run dev           # build the browser UI and start the app
-npm run dev:web       # Vite development server; proxies /api to port 8330
+npm run dev           # serve with auto-restart; UI is served from web/ over HMR
+npm run dev:web       # standalone Vite development server; proxies /api to port 8330
 npm run build         # build server and browser UI
 npm test              # API and persistence tests
 npm start             # run the compiled CLI

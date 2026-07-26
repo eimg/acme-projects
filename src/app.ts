@@ -1,10 +1,8 @@
 import express, { type Express } from "express";
 import type { Server } from "node:http";
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type Database from "better-sqlite3";
 import { BOARD_COLUMNS, type ColumnId } from "./types.js";
+import { attachHmr, webAssets, webFromSource, webIndex } from "./webAssets.js";
 import {
   createProjectIssue,
   IntegrationConflict,
@@ -33,13 +31,6 @@ import {
   withdrawImplementationAttempt,
 } from "./store.js";
 
-const bundledReactDir = join(dirname(fileURLToPath(import.meta.url)), "react");
-const reactDir = existsSync(bundledReactDir)
-  ? bundledReactDir
-  : resolve(process.cwd(), "dist/react");
-const reactIndex = existsSync(join(reactDir, "index.html"))
-  ? join(reactDir, "index.html")
-  : resolve(process.cwd(), "web/index.html");
 const columnIds = new Set<string>(BOARD_COLUMNS.map((column) => column.id));
 const manualColumnIds = new Set<ColumnId>(["ideas", "exploring", "ready"]);
 
@@ -52,7 +43,7 @@ export function createApp({
 }): Express {
   const app = express();
   app.use(express.json());
-  app.use(express.static(reactDir, { index: false }));
+  app.use(webAssets());
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
   app.get("/api/columns", (_req, res) => res.json(BOARD_COLUMNS));
@@ -287,7 +278,7 @@ export function createApp({
     res.status(204).end();
   });
 
-  app.get("*path", (_req, res) => res.sendFile(reactIndex));
+  app.get("*path", webIndex());
   return app;
 }
 
@@ -300,9 +291,13 @@ export function startServer({
   port: number;
   host: string;
 }): Server {
-  return createApp({ db }).listen(port, host, () => {
-    console.log(`Acme Projects running at http://${host}:${port}`);
+  const server = createApp({ db }).listen(port, host, () => {
+    console.log(
+      `Acme Projects running at http://${host}:${port}${webFromSource() ? "  (web from source)" : ""}`,
+    );
   });
+  attachHmr(server);
+  return server;
 }
 
 function text(value: unknown): string | undefined {
