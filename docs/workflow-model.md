@@ -2,7 +2,8 @@
 
 **Status:** The manual Ready-card → Acme Issues handoff is implemented against
 the nested multi-project Issues API (`issuesUrl` + Issues project slug/id).
-Automatic triggering and Helix/PR lifecycle projection are planned.
+Issues → Projects lifecycle webhooks project `In progress` / `In review` /
+`Done`. Automatic triggering remains planned.
 
 Acme Projects owns collaborative feature intent for repositories that already
 exist. Brand-new project inception belongs to **Prelude**, which drafts freeform

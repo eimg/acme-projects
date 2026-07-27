@@ -328,6 +328,26 @@ export function getActiveImplementationAttempt(
   return row ? toImplementationAttempt(row) : undefined;
 }
 
+export function getImplementationAttemptByIssueId(
+  db: Database.Database,
+  issueId: number,
+): ImplementationAttempt | undefined {
+  const active = db.prepare(`
+    SELECT * FROM implementation_attempts
+    WHERE issue_id = ? AND status = 'issue_pending'
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+  `).get(issueId) as ImplementationAttemptRow | undefined;
+  if (active) return toImplementationAttempt(active);
+  const latest = db.prepare(`
+    SELECT * FROM implementation_attempts
+    WHERE issue_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+  `).get(issueId) as ImplementationAttemptRow | undefined;
+  return latest ? toImplementationAttempt(latest) : undefined;
+}
+
 export function createImplementationAttempt(
   db: Database.Database,
   cardId: number,

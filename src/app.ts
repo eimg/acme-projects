@@ -12,6 +12,13 @@ import {
   withdrawProjectIssue,
 } from "./acmeIssues.js";
 import {
+  LifecycleConflictError,
+  LifecycleNotFoundError,
+  parseIssuesLifecyclePayload,
+  projectIssuesLifecycle,
+} from "./issuesLifecycle.js";
+import { issuesLifecycleWebhookUrl, setPublicBaseUrl } from "./publicUrl.js";
+import {
   createCard,
   createComment,
   createImplementationAttempt,
@@ -238,6 +245,7 @@ export function createApp({
         fetchFn,
         project,
         card,
+        { projectsCallbackUrl: issuesLifecycleWebhookUrl() },
       );
       const attempt = createImplementationAttempt(db, card.id, {
         issueId: issue.id,
@@ -251,6 +259,33 @@ export function createApp({
     } catch (error) {
       const status = error instanceof IntegrationConflict ? 409 : 502;
       res.status(status).json({ error: errorMessage(error) });
+    }
+  });
+
+  app.post("/api/webhooks/issues", (req, res) => {
+    let payload;
+    try {
+      payload = parseIssuesLifecyclePayload(req.body);
+    } catch (error) {
+      return res.status(400).json({ error: errorMessage(error) });
+    }
+    try {
+      const result = projectIssuesLifecycle(db, payload);
+      res.status(200).json({
+        ok: true,
+        moved: result.moved,
+        columnId: result.columnId,
+        card: result.card,
+        attemptId: result.attempt.id,
+      });
+    } catch (error) {
+      if (error instanceof LifecycleNotFoundError) {
+        return res.status(404).json({ error: errorMessage(error) });
+      }
+      if (error instanceof LifecycleConflictError) {
+        return res.status(409).json({ error: errorMessage(error) });
+      }
+      return res.status(500).json({ error: errorMessage(error) });
     }
   });
 
@@ -316,12 +351,15 @@ export function startServer({
   db,
   port,
   host,
+  fetchFn,
 }: {
   db: Database.Database;
   port: number;
   host: string;
+  fetchFn?: FetchFn;
 }): Server {
-  const server = createApp({ db }).listen(port, host, () => {
+  setPublicBaseUrl(process.env.ACME_PROJECTS_BASE_URL ?? `http://${host}:${port}`);
+  const server = createApp({ db, fetchFn }).listen(port, host, () => {
     console.log(
       `Acme Projects running at http://${host}:${port}${webFromSource() ? "  (web from source)" : ""}`,
     );

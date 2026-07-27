@@ -27,6 +27,7 @@ export async function createProjectIssue(
   fetchFn: FetchFn,
   project: Project,
   card: Card,
+  opts: { projectsCallbackUrl: string },
 ): Promise<{ issue: AcmeIssue; snapshot: string; triggerLabel: string; issuesProjectRef: string }> {
   const baseUrl = normalizeIssuesUrl(project.issuesUrl);
   const projectRef = normalizeIssuesProjectRef(project.issuesProjectRef);
@@ -47,6 +48,8 @@ export async function createProjectIssue(
       body: snapshot,
       labels: ["acme-projects"],
       status: "open",
+      sourceCardId: String(card.id),
+      projectsCallbackUrl: opts.projectsCallbackUrl,
     }),
   });
   const result = await readIssueResponse(response, "create issue");

@@ -78,6 +78,8 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_implementation_attempts_card
       ON implementation_attempts(card_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_implementation_attempts_issue
+      ON implementation_attempts(issue_id, created_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_implementation_attempts_active
       ON implementation_attempts(card_id)
       WHERE status = 'issue_pending';

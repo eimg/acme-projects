@@ -32,8 +32,9 @@ Acme Projects assumes a repository already exists. Brand-new project inception b
   implementation issue from Acme Issues, which triggers Helix and owns the PR
   lifecycle.
 - A human currently adds the configured trigger label in Acme Issues. Automatic
-  triggering and callbacks that project `In progress`, `In review`, and `Done`
-  remain planned.
+  triggering remains planned. Lifecycle projection is implemented via Issues →
+  Projects webhooks: run started → `In progress`, PR registered → `In review`,
+  merge/close → `Done`.
 - Manual moves are limited to Ideas, Exploring, and Ready. A linked issue locks
   cross-column movement; Return to exploration closes only an open issue that
   does not yet contain the configured trigger label.

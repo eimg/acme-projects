@@ -97,9 +97,16 @@ Ready card
   → Acme Issues triggers Helix
 ```
 
-Automatic triggering and the later `In progress` → `In review` → `Done`
-lifecycle projection remain planned. Acme Projects does not call Helix
-directly. See [`docs/workflow-model.md`](./docs/workflow-model.md).
+Automatic triggering remains planned. After Submit as issue, Acme Issues
+callbacks project the card forward:
+
+```text
+Helix run accepted → In progress
+PR registered → In review
+Human merge / issue completed → Done
+```
+
+Acme Projects does not call Helix directly. See [`docs/workflow-model.md`](./docs/workflow-model.md).
 
 ## Commands
 
