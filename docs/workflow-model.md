@@ -1,6 +1,7 @@
 # Intended implementation workflow
 
-**Status:** The manual Ready-card → Acme Issues handoff is implemented.
+**Status:** The manual Ready-card → Acme Issues handoff is implemented against
+the nested multi-project Issues API (`issuesUrl` + Issues project slug/id).
 Automatic triggering and Helix/PR lifecycle projection are planned.
 
 Acme Projects owns collaborative feature intent for repositories that already

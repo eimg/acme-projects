@@ -227,9 +227,11 @@ function BoardHeader({
         <div className="eyebrow">Project board</div>
         <h1>{project.name}</h1>
         <p>{project.description || "A shared space for ideas, decisions, and implementation intent."}</p>
-        <div className={`repository-scope ${project.issuesUrl ? "" : "unset"}`}>
+        <div className={`repository-scope ${project.issuesUrl && project.issuesProjectRef ? "" : "unset"}`}>
           <LinkIcon />
-          {project.issuesUrl || "Acme Issues not configured"}
+          {project.issuesUrl && project.issuesProjectRef
+            ? `${project.issuesUrl} · ${project.issuesProjectRef}`
+            : "Acme Issues not configured"}
         </div>
         {project.repositoryPath ? (
           <div className="repository-scope">
@@ -410,6 +412,7 @@ function NewProjectDialog({
       description: string;
       repositoryPath: string;
       issuesUrl: string;
+      issuesProjectRef: string;
     }) =>
       api<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
     onSuccess: async (project) => {
@@ -429,6 +432,7 @@ function NewProjectDialog({
             description: String(data.get("description")),
             repositoryPath: String(data.get("repositoryPath")),
             issuesUrl: String(data.get("issuesUrl")),
+            issuesProjectRef: String(data.get("issuesProjectRef")),
           });
         }}
       >
@@ -447,6 +451,17 @@ function NewProjectDialog({
             type="url"
             defaultValue="http://127.0.0.1:8320"
             placeholder="http://127.0.0.1:8320"
+          />
+        </Field>
+        <Field
+          label="Acme Issues project"
+          hint="Slug or id of the Issues project that should receive submitted cards (for example acme-todo)."
+        >
+          <input
+            name="issuesProjectRef"
+            defaultValue="default"
+            placeholder="default"
+            autoComplete="off"
           />
         </Field>
         <Field
@@ -478,6 +493,7 @@ function ProjectSettingsDialog({
       description: string;
       repositoryPath: string;
       issuesUrl: string;
+      issuesProjectRef: string;
     }) =>
       api<Project>(`/api/projects/${project.id}`, {
         method: "PATCH",
@@ -507,6 +523,7 @@ function ProjectSettingsDialog({
             description: String(data.get("description")),
             repositoryPath: String(data.get("repositoryPath")),
             issuesUrl: String(data.get("issuesUrl")),
+            issuesProjectRef: String(data.get("issuesProjectRef")),
           });
         }}
       >
@@ -522,6 +539,17 @@ function ProjectSettingsDialog({
             type="url"
             defaultValue={project.issuesUrl}
             placeholder="http://127.0.0.1:8320"
+          />
+        </Field>
+        <Field
+          label="Acme Issues project"
+          hint="Slug or id of the Issues project that receives submitted cards."
+        >
+          <input
+            name="issuesProjectRef"
+            defaultValue={project.issuesProjectRef}
+            placeholder="default"
+            autoComplete="off"
           />
         </Field>
         <Field label="Short description">
@@ -834,7 +862,10 @@ function ImplementationPanel({
     );
   }
 
-  const missing = [!project.issuesUrl && "Acme Issues URL"].filter(Boolean);
+  const missing = [
+    !project.issuesUrl && "Acme Issues URL",
+    !project.issuesProjectRef.trim() && "Acme Issues project",
+  ].filter(Boolean);
   return (
     <section className="implementation-panel">
       <div className="implementation-icon"><SendIcon /></div>

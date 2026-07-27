@@ -26,6 +26,7 @@ function migrate(db: Database.Database): void {
       description TEXT NOT NULL DEFAULT '',
       repository_path TEXT NOT NULL DEFAULT '',
       issues_url TEXT NOT NULL DEFAULT '',
+      issues_project_ref TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -66,6 +67,7 @@ function migrate(db: Database.Database): void {
       issue_id INTEGER NOT NULL,
       issue_url TEXT NOT NULL,
       issues_url TEXT NOT NULL,
+      issues_project_ref TEXT NOT NULL DEFAULT '',
       trigger_label TEXT NOT NULL,
       status TEXT NOT NULL CHECK(status IN ('issue_pending', 'withdrawn')),
       snapshot TEXT NOT NULL,
@@ -88,9 +90,15 @@ function migrate(db: Database.Database): void {
   if (!projectColumns.some((column) => column.name === "issues_url")) {
     db.exec("ALTER TABLE projects ADD COLUMN issues_url TEXT NOT NULL DEFAULT ''");
   }
+  if (!projectColumns.some((column) => column.name === "issues_project_ref")) {
+    db.exec("ALTER TABLE projects ADD COLUMN issues_project_ref TEXT NOT NULL DEFAULT ''");
+  }
 
   const attemptColumns = db.prepare("PRAGMA table_info(implementation_attempts)").all() as { name: string }[];
   if (!attemptColumns.some((column) => column.name === "trigger_label")) {
     db.exec("ALTER TABLE implementation_attempts ADD COLUMN trigger_label TEXT NOT NULL DEFAULT 'trigger'");
+  }
+  if (!attemptColumns.some((column) => column.name === "issues_project_ref")) {
+    db.exec("ALTER TABLE implementation_attempts ADD COLUMN issues_project_ref TEXT NOT NULL DEFAULT ''");
   }
 }

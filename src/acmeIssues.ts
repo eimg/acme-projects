@@ -9,6 +9,7 @@ interface AcmeIssue {
   status: "open" | "in_progress" | "closed";
   labels: string[];
   url: string;
+  projectId?: number;
 }
 
 interface IssueResponse {
@@ -16,21 +17,29 @@ interface IssueResponse {
   delivery: unknown;
 }
 
+interface IssuesProject {
+  id: number;
+  slug: string;
+  labelFilter: string;
+}
+
 export async function createProjectIssue(
   fetchFn: FetchFn,
   project: Project,
   card: Card,
-): Promise<{ issue: AcmeIssue; snapshot: string; triggerLabel: string }> {
+): Promise<{ issue: AcmeIssue; snapshot: string; triggerLabel: string; issuesProjectRef: string }> {
   const baseUrl = normalizeIssuesUrl(project.issuesUrl);
-  const configResponse = await fetchFn(`${baseUrl}/api/config`);
-  const config = await readConfig(configResponse);
-  if (config.labelFilter === "acme-projects") {
+  const projectRef = normalizeIssuesProjectRef(project.issuesProjectRef);
+  const issuesProject = await readIssuesProject(
+    await fetchFn(issuesProjectUrl(baseUrl, projectRef)),
+  );
+  if (issuesProject.labelFilter === "acme-projects") {
     throw new IntegrationConflict(
       "Acme Issues uses acme-projects as its trigger label. Choose a different trigger label before submitting.",
     );
   }
-  const snapshot = formatImplementationSnapshot(project, card);
-  const response = await fetchFn(`${baseUrl}/api/issues`, {
+  const snapshot = formatImplementationSnapshot(project, card, issuesProject);
+  const response = await fetchFn(issuesProjectUrl(baseUrl, projectRef, "/issues"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -47,21 +56,26 @@ export async function createProjectIssue(
   return {
     issue: {
       ...result.issue,
-      url: `${baseUrl}/?issue=${result.issue.id}`,
+      url: issueDeepLink(baseUrl, issuesProject.slug, result.issue),
     },
     snapshot,
-    triggerLabel: config.labelFilter,
+    triggerLabel: issuesProject.labelFilter,
+    issuesProjectRef: issuesProject.slug,
   };
 }
 
 export async function withdrawProjectIssue(
   fetchFn: FetchFn,
   issuesUrl: string,
+  issuesProjectRef: string,
   issueId: number,
   triggerLabel: string,
 ): Promise<AcmeIssue> {
   const baseUrl = normalizeIssuesUrl(issuesUrl);
-  const currentResponse = await fetchFn(`${baseUrl}/api/issues/${issueId}`);
+  const projectRef = normalizeIssuesProjectRef(issuesProjectRef);
+  const currentResponse = await fetchFn(
+    issuesProjectUrl(baseUrl, projectRef, `/issues/${issueId}`),
+  );
   const current = await readIssue(currentResponse, "read issue");
   if (current.labels.includes(triggerLabel)) {
     throw new IntegrationConflict(
@@ -74,7 +88,7 @@ export async function withdrawProjectIssue(
     );
   }
 
-  const response = await fetchFn(`${baseUrl}/api/issues/${issueId}`, {
+  const response = await fetchFn(issuesProjectUrl(baseUrl, projectRef, `/issues/${issueId}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status: "closed" }),
@@ -97,11 +111,38 @@ export function normalizeIssuesUrl(value: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
-function formatImplementationSnapshot(project: Project, card: Card): string {
+export function normalizeIssuesProjectRef(value: string): string {
+  const ref = value.trim();
+  if (!ref) {
+    throw new Error("Acme Issues project slug or id is required");
+  }
+  if (ref.includes("/") || ref.includes("?")) {
+    throw new Error("Acme Issues project ref must be a slug or numeric id");
+  }
+  return ref;
+}
+
+function issuesProjectUrl(baseUrl: string, projectRef: string, suffix = ""): string {
+  const encoded = encodeURIComponent(projectRef);
+  const path = suffix.startsWith("/") ? suffix : suffix ? `/${suffix}` : "";
+  return `${baseUrl}/api/projects/${encoded}${path}`;
+}
+
+function issueDeepLink(baseUrl: string, projectSlug: string, issue: AcmeIssue): string {
+  if (issue.url.includes("project=")) return issue.url;
+  return `${baseUrl}/?project=${encodeURIComponent(projectSlug)}&issue=${issue.id}`;
+}
+
+function formatImplementationSnapshot(
+  project: Project,
+  card: Card,
+  issuesProject: IssuesProject,
+): string {
   const sections = [
     "Generated from Acme Projects.",
     "",
     `Source: ${project.name} / ACM-${card.id}`,
+    `Issues project: ${issuesProject.slug} (#${issuesProject.id})`,
   ];
   if (project.repositoryPath.trim()) {
     sections.push(`Repository: ${project.repositoryPath}`);
@@ -123,17 +164,25 @@ async function readIssue(response: Response, action: string): Promise<AcmeIssue>
   return validateIssue(await readJson(response, action), action);
 }
 
-async function readConfig(response: Response): Promise<{ labelFilter: string }> {
-  const value = await readJson(response, "read Acme Issues configuration");
+async function readIssuesProject(response: Response): Promise<IssuesProject> {
+  const value = await readJson(response, "read Acme Issues project");
   if (
     !value ||
     typeof value !== "object" ||
+    typeof (value as { id?: unknown }).id !== "number" ||
+    typeof (value as { slug?: unknown }).slug !== "string" ||
+    !(value as { slug: string }).slug.trim() ||
     typeof (value as { labelFilter?: unknown }).labelFilter !== "string" ||
     !(value as { labelFilter: string }).labelFilter.trim()
   ) {
-    throw new Error("Acme Issues returned an invalid trigger-label configuration");
+    throw new Error("Acme Issues returned an invalid project configuration");
   }
-  return { labelFilter: (value as { labelFilter: string }).labelFilter.trim() };
+  const project = value as { id: number; slug: string; labelFilter: string };
+  return {
+    id: project.id,
+    slug: project.slug.trim(),
+    labelFilter: project.labelFilter.trim(),
+  };
 }
 
 async function readJson(response: Response, action: string): Promise<unknown> {

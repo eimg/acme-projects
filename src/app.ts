@@ -6,6 +6,7 @@ import { attachHmr, webAssets, webFromSource, webIndex } from "./webAssets.js";
 import {
   createProjectIssue,
   IntegrationConflict,
+  normalizeIssuesProjectRef,
   normalizeIssuesUrl,
   type FetchFn,
   withdrawProjectIssue,
@@ -61,11 +62,19 @@ export function createApp({
         return res.status(400).json({ error: errorMessage(error) });
       }
     }
+    if (typeof body.issuesProjectRef === "string" && body.issuesProjectRef.trim()) {
+      try {
+        normalizeIssuesProjectRef(body.issuesProjectRef);
+      } catch (error) {
+        return res.status(400).json({ error: errorMessage(error) });
+      }
+    }
     res.status(201).json(createProject(db, {
       name,
       description: text(body.description) ?? "",
       repositoryPath: text(body.repositoryPath) ?? "",
       issuesUrl: text(body.issuesUrl) ?? "",
+      issuesProjectRef: text(body.issuesProjectRef) ?? "",
     }));
   });
 
@@ -82,11 +91,23 @@ export function createApp({
         return res.status(400).json({ error: errorMessage(error) });
       }
     }
+    if (
+      body.issuesProjectRef !== undefined &&
+      typeof body.issuesProjectRef === "string" &&
+      body.issuesProjectRef.trim()
+    ) {
+      try {
+        normalizeIssuesProjectRef(body.issuesProjectRef);
+      } catch (error) {
+        return res.status(400).json({ error: errorMessage(error) });
+      }
+    }
     const project = updateProject(db, id, {
       name: text(body.name),
       description: typeof body.description === "string" ? body.description : undefined,
       repositoryPath: typeof body.repositoryPath === "string" ? body.repositoryPath : undefined,
       issuesUrl: typeof body.issuesUrl === "string" ? body.issuesUrl : undefined,
+      issuesProjectRef: typeof body.issuesProjectRef === "string" ? body.issuesProjectRef : undefined,
     });
     if (!project) return res.status(404).json({ error: "Project not found" });
     res.json(project);
@@ -208,13 +229,21 @@ export function createApp({
     if (!project.issuesUrl) {
       return res.status(409).json({ error: "Set the Acme Issues URL before submitting" });
     }
+    if (!project.issuesProjectRef.trim()) {
+      return res.status(409).json({ error: "Set the Acme Issues project slug before submitting" });
+    }
 
     try {
-      const { issue, snapshot, triggerLabel } = await createProjectIssue(fetchFn, project, card);
+      const { issue, snapshot, triggerLabel, issuesProjectRef } = await createProjectIssue(
+        fetchFn,
+        project,
+        card,
+      );
       const attempt = createImplementationAttempt(db, card.id, {
         issueId: issue.id,
         issueUrl: issue.url,
         issuesUrl: normalizeIssuesUrl(project.issuesUrl),
+        issuesProjectRef,
         triggerLabel,
         snapshot,
       });
@@ -241,6 +270,7 @@ export function createApp({
       await withdrawProjectIssue(
         fetchFn,
         attempt.issuesUrl,
+        attempt.issuesProjectRef,
         attempt.issueId,
         attempt.triggerLabel,
       );
