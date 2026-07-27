@@ -1,7 +1,7 @@
 # Intended implementation workflow
 
-**Status:** The manual Ready-card → Acme Issues handoff is implemented against
-the nested multi-project Issues API (`issuesUrl` + Issues project slug/id).
+**Status:** The manual Ready-card → issues system handoff is implemented against
+the nested multi-project Issues API (`issuesUrl` + project slug/id).
 Issues → Projects lifecycle webhooks project `In progress` / `In review` /
 `Done`. Automatic triggering remains planned.
 

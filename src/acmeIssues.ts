@@ -36,7 +36,7 @@ export async function createProjectIssue(
   );
   if (issuesProject.labelFilter === "acme-projects") {
     throw new IntegrationConflict(
-      "Acme Issues uses acme-projects as its trigger label. Choose a different trigger label before submitting.",
+      "The issues system uses acme-projects as its trigger label. Choose a different trigger label before submitting.",
     );
   }
   const snapshot = formatImplementationSnapshot(project, card, issuesProject);
@@ -54,7 +54,7 @@ export async function createProjectIssue(
   });
   const result = await readIssueResponse(response, "create issue");
   if (result.delivery !== null) {
-    throw new Error("Acme Issues unexpectedly triggered delivery for a non-triggering issue");
+    throw new Error("The issues system unexpectedly triggered delivery for a non-triggering issue");
   }
   return {
     issue: {
@@ -106,10 +106,10 @@ export function normalizeIssuesUrl(value: string): string {
   try {
     url = new URL(value);
   } catch {
-    throw new Error("Acme Issues URL must be a valid HTTP URL");
+    throw new Error("Issues system URL must be a valid HTTP URL");
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Acme Issues URL must use http or https");
+    throw new Error("Issues system URL must use http or https");
   }
   return url.toString().replace(/\/$/, "");
 }
@@ -117,10 +117,10 @@ export function normalizeIssuesUrl(value: string): string {
 export function normalizeIssuesProjectRef(value: string): string {
   const ref = value.trim();
   if (!ref) {
-    throw new Error("Acme Issues project slug or id is required");
+    throw new Error("Issues system project slug or id is required");
   }
   if (ref.includes("/") || ref.includes("?")) {
-    throw new Error("Acme Issues project ref must be a slug or numeric id");
+    throw new Error("Issues system project ref must be a slug or numeric id");
   }
   return ref;
 }
@@ -159,7 +159,7 @@ function formatImplementationSnapshot(
 
 async function readIssueResponse(response: Response, action: string): Promise<IssueResponse> {
   const body = await readJson(response, action) as Partial<IssueResponse>;
-  if (!body.issue) throw new Error(`Acme Issues returned an invalid response while trying to ${action}`);
+  if (!body.issue) throw new Error(`Issues system returned an invalid response while trying to ${action}`);
   return { issue: validateIssue(body.issue, action), delivery: body.delivery ?? null };
 }
 
@@ -168,7 +168,7 @@ async function readIssue(response: Response, action: string): Promise<AcmeIssue>
 }
 
 async function readIssuesProject(response: Response): Promise<IssuesProject> {
-  const value = await readJson(response, "read Acme Issues project");
+  const value = await readJson(response, "read issues system project");
   if (
     !value ||
     typeof value !== "object" ||
@@ -178,7 +178,7 @@ async function readIssuesProject(response: Response): Promise<IssuesProject> {
     typeof (value as { labelFilter?: unknown }).labelFilter !== "string" ||
     !(value as { labelFilter: string }).labelFilter.trim()
   ) {
-    throw new Error("Acme Issues returned an invalid project configuration");
+    throw new Error("Issues system returned an invalid project configuration");
   }
   const project = value as { id: number; slug: string; labelFilter: string };
   return {
@@ -208,7 +208,7 @@ function validateIssue(value: unknown, action: string): AcmeIssue {
     !Array.isArray((value as Partial<AcmeIssue>).labels) ||
     typeof (value as Partial<AcmeIssue>).status !== "string"
   ) {
-    throw new Error(`Acme Issues returned an invalid issue while trying to ${action}`);
+    throw new Error(`Issues system returned an invalid issue while trying to ${action}`);
   }
   return value as AcmeIssue;
 }

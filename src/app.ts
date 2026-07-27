@@ -234,10 +234,10 @@ export function createApp({
     }
     const project = getProject(db, card.projectId)!;
     if (!project.issuesUrl) {
-      return res.status(409).json({ error: "Set the Acme Issues URL before submitting" });
+      return res.status(409).json({ error: "Set the issues system URL before submitting" });
     }
     if (!project.issuesProjectRef.trim()) {
-      return res.status(409).json({ error: "Set the Acme Issues project slug before submitting" });
+      return res.status(409).json({ error: "Set the issues system project before submitting" });
     }
 
     try {

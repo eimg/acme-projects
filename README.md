@@ -84,9 +84,9 @@ the normal default does not run Helix.
 
 For manual testing, open the linked issue in Acme Issues and add its configured
 trigger label (normally `trigger`). Acme Issues then uses its existing Helix
-delivery path. Submission is refused if Acme Issues is configured to use
+delivery path. Submission is refused if the issues system is configured to use
 `acme-projects` as its trigger label.
-Configure the Acme Issues URL and Issues project slug in **Project settings**
+Configure the issues system URL and project (slug or id) in **Project settings**
 (repository path is optional and unused by the current Helix handoff).
 
 ```text

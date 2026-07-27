@@ -21,7 +21,7 @@ Acme Projects assumes a repository already exists. Brand-new project inception b
 - `repositoryPath` is optional metadata for a later multi-repo Issues surface.
   Today's Submit as issue → Acme Issues → Helix path uses the Helix serve
   workspace; do not require a repository path for handoff.
-- Each board stores an Acme Issues base URL plus an Issues project slug/id
+- Each board stores an issues system base URL plus a project slug/id
   (`issuesProjectRef`) so Submit as issue targets nested
   `/api/projects/:ref/issues` routes.
 - The fixed flow is `Ideas → Exploring → Ready → In progress → In review → Done`.

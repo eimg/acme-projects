@@ -79,7 +79,7 @@ export function App() {
                 onDelete={() => {
                   if (
                     confirm(
-                      `Delete “${board.data.project.name}” and all of its cards?\n\nLinked Acme Issues are left alone; only this project board is removed.`,
+                      `Delete “${board.data.project.name}” and all of its cards?\n\nLinked issues are left alone; only this project board is removed.`,
                     )
                   ) {
                     deleteProject.mutate(board.data.project.id);
@@ -204,7 +204,7 @@ function ProjectSidebar({
       </nav>
       <div className="sidebar-note">
         <SparkIcon />
-        <p><strong>Explore first.</strong> Ready cards can be submitted to Acme Issues when a human chooses.</p>
+        <p><strong>Explore first.</strong> Ready cards can be submitted to an issues system when a human chooses.</p>
       </div>
     </aside>
   );
@@ -231,7 +231,7 @@ function BoardHeader({
           <LinkIcon />
           {project.issuesUrl && project.issuesProjectRef
             ? `${project.issuesUrl} · ${project.issuesProjectRef}`
-            : "Acme Issues not configured"}
+            : "Connect issues system"}
         </div>
         {project.repositoryPath ? (
           <div className="repository-scope">
@@ -443,8 +443,8 @@ function NewProjectDialog({
           <textarea name="description" rows={3} placeholder="Explore a simpler way for customers to…" />
         </Field>
         <Field
-          label="Acme Issues URL"
-          hint="Required to submit Ready cards. Helix runs against whichever workspace helix serve was started in."
+          label="Issues system URL"
+          hint="Base URL of the issues tracker that receives Ready-card handoffs."
         >
           <input
             name="issuesUrl"
@@ -454,8 +454,8 @@ function NewProjectDialog({
           />
         </Field>
         <Field
-          label="Acme Issues project"
-          hint="Slug or id of the Issues project that should receive submitted cards (for example acme-todo)."
+          label="Issues system project"
+          hint="Slug or id of the issues project that should receive submitted cards (for example acme-todo)."
         >
           <input
             name="issuesProjectRef"
@@ -531,7 +531,7 @@ function ProjectSettingsDialog({
           <input name="name" defaultValue={project.name} autoFocus required />
         </Field>
         <Field
-          label="Acme Issues URL"
+          label="Issues system URL"
           hint="Submitting a Ready card creates a non-triggering issue here. Helix runs in the Helix serve workspace."
         >
           <input
@@ -542,8 +542,8 @@ function ProjectSettingsDialog({
           />
         </Field>
         <Field
-          label="Acme Issues project"
-          hint="Slug or id of the Issues project that receives submitted cards."
+          label="Issues system project"
+          hint="Slug or id of the issues project that receives submitted cards."
         >
           <input
             name="issuesProjectRef"
@@ -697,7 +697,7 @@ function CardDetail({
         queryClient.invalidateQueries({ queryKey: ["board", result.card.projectId] }),
         queryClient.invalidateQueries({ queryKey: ["projects"] }),
       ]);
-      onToast(`Created Acme Issues issue #${result.card.activeImplementation?.issueId}`);
+      onToast(`Created issues system issue #${result.card.activeImplementation?.issueId}`);
     },
   });
   const returnToExploration = useMutation({
@@ -743,7 +743,7 @@ function CardDetail({
               withdrawing={returnToExploration.isPending}
               error={submitIssue.error ?? returnToExploration.error}
               onSubmit={() => {
-                if (confirm("Create a non-triggering implementation issue in Acme Issues?")) {
+                if (confirm("Create a non-triggering implementation issue in the connected issues system?")) {
                   submitIssue.mutate();
                 }
               }}
@@ -851,7 +851,7 @@ function ImplementationPanel({
           <strong>Awaiting manual trigger</strong>
           <p>
             Issue <a href={attempt.issueUrl} target="_blank" rel="noreferrer">#{attempt.issueId}</a>
-            {" "}was created without the <code>{attempt.triggerLabel}</code> label. Add it in Acme Issues when ready.
+            {" "}was created without the <code>{attempt.triggerLabel}</code> label. Add it in the issues system when ready.
           </p>
           <FormError error={error} />
           <button className="button ghost small" disabled={withdrawing} onClick={onReturn}>
@@ -863,8 +863,8 @@ function ImplementationPanel({
   }
 
   const missing = [
-    !project.issuesUrl && "Acme Issues URL",
-    !project.issuesProjectRef.trim() && "Acme Issues project",
+    !project.issuesUrl && "issues system URL",
+    !project.issuesProjectRef.trim() && "issues system project",
   ].filter(Boolean);
   return (
     <section className="implementation-panel">
@@ -873,9 +873,9 @@ function ImplementationPanel({
         <span className="eyebrow">Ready for implementation</span>
         <strong>Submit as an issue</strong>
         <p>
-          This creates an Acme Issues issue labeled <code>acme-projects</code>.
-          It will not trigger Helix until a human adds Acme Issues&apos; configured trigger label.
-          The run then uses the Helix instance Issues is pointed at (its serve workspace).
+          This creates an issues-system issue labeled <code>acme-projects</code>.
+          It will not trigger Helix until a human adds that tracker&apos;s configured trigger label.
+          The run then uses the Helix instance the issues system is pointed at (its serve workspace).
         </p>
         {missing.length > 0 && (
           <p className="configuration-warning">Set the {missing.join(" and ")} in Project settings first.</p>

@@ -17,7 +17,7 @@ export interface Project {
   description: string;
   repositoryPath: string;
   issuesUrl: string;
-  /** Acme Issues project slug or id for nested `/api/projects/:ref/...` routes. */
+  /** Issues system project slug or id for nested `/api/projects/:ref/...` routes. */
   issuesProjectRef: string;
   createdAt: number;
   updatedAt: number;
