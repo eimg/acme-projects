@@ -17,6 +17,8 @@ export interface Project {
   description: string;
   repositoryPath: string;
   issuesUrl: string;
+  /** Issues system project slug or id for nested `/api/projects/:ref/...` routes. */
+  issuesProjectRef: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -29,6 +31,7 @@ export interface ImplementationAttempt {
   issueId: number;
   issueUrl: string;
   issuesUrl: string;
+  issuesProjectRef: string;
   triggerLabel: string;
   status: ImplementationAttemptStatus;
   snapshot: string;

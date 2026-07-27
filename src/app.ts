@@ -6,10 +6,18 @@ import { attachHmr, webAssets, webFromSource, webIndex } from "./webAssets.js";
 import {
   createProjectIssue,
   IntegrationConflict,
+  normalizeIssuesProjectRef,
   normalizeIssuesUrl,
   type FetchFn,
   withdrawProjectIssue,
 } from "./acmeIssues.js";
+import {
+  LifecycleConflictError,
+  LifecycleNotFoundError,
+  parseIssuesLifecyclePayload,
+  projectIssuesLifecycle,
+} from "./issuesLifecycle.js";
+import { issuesLifecycleWebhookUrl, setPublicBaseUrl } from "./publicUrl.js";
 import {
   createCard,
   createComment,
@@ -61,11 +69,19 @@ export function createApp({
         return res.status(400).json({ error: errorMessage(error) });
       }
     }
+    if (typeof body.issuesProjectRef === "string" && body.issuesProjectRef.trim()) {
+      try {
+        normalizeIssuesProjectRef(body.issuesProjectRef);
+      } catch (error) {
+        return res.status(400).json({ error: errorMessage(error) });
+      }
+    }
     res.status(201).json(createProject(db, {
       name,
       description: text(body.description) ?? "",
       repositoryPath: text(body.repositoryPath) ?? "",
       issuesUrl: text(body.issuesUrl) ?? "",
+      issuesProjectRef: text(body.issuesProjectRef) ?? "",
     }));
   });
 
@@ -82,11 +98,23 @@ export function createApp({
         return res.status(400).json({ error: errorMessage(error) });
       }
     }
+    if (
+      body.issuesProjectRef !== undefined &&
+      typeof body.issuesProjectRef === "string" &&
+      body.issuesProjectRef.trim()
+    ) {
+      try {
+        normalizeIssuesProjectRef(body.issuesProjectRef);
+      } catch (error) {
+        return res.status(400).json({ error: errorMessage(error) });
+      }
+    }
     const project = updateProject(db, id, {
       name: text(body.name),
       description: typeof body.description === "string" ? body.description : undefined,
       repositoryPath: typeof body.repositoryPath === "string" ? body.repositoryPath : undefined,
       issuesUrl: typeof body.issuesUrl === "string" ? body.issuesUrl : undefined,
+      issuesProjectRef: typeof body.issuesProjectRef === "string" ? body.issuesProjectRef : undefined,
     });
     if (!project) return res.status(404).json({ error: "Project not found" });
     res.json(project);
@@ -206,15 +234,24 @@ export function createApp({
     }
     const project = getProject(db, card.projectId)!;
     if (!project.issuesUrl) {
-      return res.status(409).json({ error: "Set the Acme Issues URL before submitting" });
+      return res.status(409).json({ error: "Set the issues system URL before submitting" });
+    }
+    if (!project.issuesProjectRef.trim()) {
+      return res.status(409).json({ error: "Set the issues system project before submitting" });
     }
 
     try {
-      const { issue, snapshot, triggerLabel } = await createProjectIssue(fetchFn, project, card);
+      const { issue, snapshot, triggerLabel, issuesProjectRef } = await createProjectIssue(
+        fetchFn,
+        project,
+        card,
+        { projectsCallbackUrl: issuesLifecycleWebhookUrl() },
+      );
       const attempt = createImplementationAttempt(db, card.id, {
         issueId: issue.id,
         issueUrl: issue.url,
         issuesUrl: normalizeIssuesUrl(project.issuesUrl),
+        issuesProjectRef,
         triggerLabel,
         snapshot,
       });
@@ -222,6 +259,33 @@ export function createApp({
     } catch (error) {
       const status = error instanceof IntegrationConflict ? 409 : 502;
       res.status(status).json({ error: errorMessage(error) });
+    }
+  });
+
+  app.post("/api/webhooks/issues", (req, res) => {
+    let payload;
+    try {
+      payload = parseIssuesLifecyclePayload(req.body);
+    } catch (error) {
+      return res.status(400).json({ error: errorMessage(error) });
+    }
+    try {
+      const result = projectIssuesLifecycle(db, payload);
+      res.status(200).json({
+        ok: true,
+        moved: result.moved,
+        columnId: result.columnId,
+        card: result.card,
+        attemptId: result.attempt.id,
+      });
+    } catch (error) {
+      if (error instanceof LifecycleNotFoundError) {
+        return res.status(404).json({ error: errorMessage(error) });
+      }
+      if (error instanceof LifecycleConflictError) {
+        return res.status(409).json({ error: errorMessage(error) });
+      }
+      return res.status(500).json({ error: errorMessage(error) });
     }
   });
 
@@ -241,6 +305,7 @@ export function createApp({
       await withdrawProjectIssue(
         fetchFn,
         attempt.issuesUrl,
+        attempt.issuesProjectRef,
         attempt.issueId,
         attempt.triggerLabel,
       );
@@ -286,12 +351,15 @@ export function startServer({
   db,
   port,
   host,
+  fetchFn,
 }: {
   db: Database.Database;
   port: number;
   host: string;
+  fetchFn?: FetchFn;
 }): Server {
-  const server = createApp({ db }).listen(port, host, () => {
+  setPublicBaseUrl(process.env.ACME_PROJECTS_BASE_URL ?? `http://${host}:${port}`);
+  const server = createApp({ db, fetchFn }).listen(port, host, () => {
     console.log(
       `Acme Projects running at http://${host}:${port}${webFromSource() ? "  (web from source)" : ""}`,
     );

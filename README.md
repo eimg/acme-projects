@@ -84,10 +84,10 @@ the normal default does not run Helix.
 
 For manual testing, open the linked issue in Acme Issues and add its configured
 trigger label (normally `trigger`). Acme Issues then uses its existing Helix
-delivery path. Submission is refused if Acme Issues is configured to use
+delivery path. Submission is refused if the issues system is configured to use
 `acme-projects` as its trigger label.
-Configure the Acme Issues URL in **Project settings** (repository path is
-optional and unused by the current Helix handoff).
+Configure the issues system URL and project (slug or id) in **Project settings**
+(repository path is optional and unused by the current Helix handoff).
 
 ```text
 Ready card
@@ -97,9 +97,16 @@ Ready card
   → Acme Issues triggers Helix
 ```
 
-Automatic triggering and the later `In progress` → `In review` → `Done`
-lifecycle projection remain planned. Acme Projects does not call Helix
-directly. See [`docs/workflow-model.md`](./docs/workflow-model.md).
+Automatic triggering remains planned. After Submit as issue, Acme Issues
+callbacks project the card forward:
+
+```text
+Helix run accepted → In progress
+PR registered → In review
+Human merge / issue completed → Done
+```
+
+Acme Projects does not call Helix directly. See [`docs/workflow-model.md`](./docs/workflow-model.md).
 
 ## Commands
 

@@ -16,6 +16,7 @@ type ProjectRow = {
   description: string;
   repository_path: string;
   issues_url: string;
+  issues_project_ref: string;
   created_at: number;
   updated_at: number;
 };
@@ -49,6 +50,7 @@ type ImplementationAttemptRow = {
   issue_id: number;
   issue_url: string;
   issues_url: string;
+  issues_project_ref: string;
   trigger_label: string;
   status: ImplementationAttemptStatus;
   snapshot: string;
@@ -68,18 +70,25 @@ export function getProject(db: Database.Database, id: number): Project | undefin
 
 export function createProject(
   db: Database.Database,
-  input: { name: string; description?: string; repositoryPath?: string; issuesUrl?: string },
+  input: {
+    name: string;
+    description?: string;
+    repositoryPath?: string;
+    issuesUrl?: string;
+    issuesProjectRef?: string;
+  },
 ): Project {
   const now = Date.now();
   const result = db.prepare(`
     INSERT INTO projects (
-      name, description, repository_path, issues_url, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?)
+      name, description, repository_path, issues_url, issues_project_ref, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     input.name.trim(),
     input.description?.trim() ?? "",
     input.repositoryPath?.trim() ?? "",
     input.issuesUrl?.trim() ?? "",
+    input.issuesProjectRef?.trim() ?? "",
     now,
     now,
   );
@@ -89,19 +98,26 @@ export function createProject(
 export function updateProject(
   db: Database.Database,
   id: number,
-  input: { name?: string; description?: string; repositoryPath?: string; issuesUrl?: string },
+  input: {
+    name?: string;
+    description?: string;
+    repositoryPath?: string;
+    issuesUrl?: string;
+    issuesProjectRef?: string;
+  },
 ): Project | undefined {
   const project = getProject(db, id);
   if (!project) return undefined;
   db.prepare(`
     UPDATE projects
-    SET name = ?, description = ?, repository_path = ?, issues_url = ?, updated_at = ?
+    SET name = ?, description = ?, repository_path = ?, issues_url = ?, issues_project_ref = ?, updated_at = ?
     WHERE id = ?
   `).run(
     input.name?.trim() ?? project.name,
     input.description?.trim() ?? project.description,
     input.repositoryPath?.trim() ?? project.repositoryPath,
     input.issuesUrl?.trim() ?? project.issuesUrl,
+    input.issuesProjectRef?.trim() ?? project.issuesProjectRef,
     Date.now(),
     id,
   );
@@ -312,6 +328,26 @@ export function getActiveImplementationAttempt(
   return row ? toImplementationAttempt(row) : undefined;
 }
 
+export function getImplementationAttemptByIssueId(
+  db: Database.Database,
+  issueId: number,
+): ImplementationAttempt | undefined {
+  const active = db.prepare(`
+    SELECT * FROM implementation_attempts
+    WHERE issue_id = ? AND status = 'issue_pending'
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+  `).get(issueId) as ImplementationAttemptRow | undefined;
+  if (active) return toImplementationAttempt(active);
+  const latest = db.prepare(`
+    SELECT * FROM implementation_attempts
+    WHERE issue_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+  `).get(issueId) as ImplementationAttemptRow | undefined;
+  return latest ? toImplementationAttempt(latest) : undefined;
+}
+
 export function createImplementationAttempt(
   db: Database.Database,
   cardId: number,
@@ -319,6 +355,7 @@ export function createImplementationAttempt(
     issueId: number;
     issueUrl: string;
     issuesUrl: string;
+    issuesProjectRef: string;
     triggerLabel: string;
     snapshot: string;
   },
@@ -326,14 +363,15 @@ export function createImplementationAttempt(
   const now = Date.now();
   const result = db.prepare(`
     INSERT INTO implementation_attempts (
-      card_id, issue_id, issue_url, issues_url, trigger_label,
+      card_id, issue_id, issue_url, issues_url, issues_project_ref, trigger_label,
       status, snapshot, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, 'issue_pending', ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, 'issue_pending', ?, ?, ?)
   `).run(
     cardId,
     input.issueId,
     input.issueUrl,
     input.issuesUrl,
+    input.issuesProjectRef,
     input.triggerLabel,
     input.snapshot,
     now,
@@ -402,6 +440,7 @@ function toProject(row: ProjectRow): Project {
     description: row.description,
     repositoryPath: row.repository_path,
     issuesUrl: row.issues_url,
+    issuesProjectRef: row.issues_project_ref ?? "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -446,6 +485,7 @@ function toImplementationAttempt(row: ImplementationAttemptRow): ImplementationA
     issueId: row.issue_id,
     issueUrl: row.issue_url,
     issuesUrl: row.issues_url,
+    issuesProjectRef: row.issues_project_ref ?? "",
     triggerLabel: row.trigger_label,
     status: row.status,
     snapshot: row.snapshot,

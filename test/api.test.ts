@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import request from "supertest";
 import { openDatabase } from "../src/db.js";
 import { createApp } from "../src/app.js";
+import { setPublicBaseUrl } from "../src/publicUrl.js";
 
 describe("acme-projects API", () => {
   let dataDir: string;
@@ -21,6 +22,8 @@ describe("acme-projects API", () => {
     status: "open" | "in_progress" | "closed";
     labels: string[];
     url: string;
+    sourceCardId?: string;
+    projectsCallbackUrl?: string;
   }>;
 
   before(() => {
@@ -29,18 +32,39 @@ describe("acme-projects API", () => {
     nextRemoteIssueId = 100;
     remoteTriggerLabel = "trigger";
     remoteIssues = new Map();
+    setPublicBaseUrl("http://projects.test");
     app = createApp({
       db,
       fetchFn: async (input, init) => {
         const url = new URL(String(input));
-        if (url.pathname === "/api/config" && (!init?.method || init.method === "GET")) {
-          return Response.json({ labelFilter: remoteTriggerLabel });
+        const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)(?:\/(.*))?$/);
+        if (!projectMatch) {
+          return Response.json({ error: "Unsupported request" }, { status: 400 });
         }
-        if (url.pathname === "/api/issues" && init?.method === "POST") {
+        const projectRef = decodeURIComponent(projectMatch[1]);
+        const rest = projectMatch[2] ?? "";
+        if (projectRef !== "default" && projectRef !== "1") {
+          return Response.json({ error: "Project not found" }, { status: 404 });
+        }
+        if (!rest && (!init?.method || init.method === "GET")) {
+          return Response.json({
+            id: 1,
+            title: "Default",
+            slug: "default",
+            labelFilter: remoteTriggerLabel,
+            webhookUrl: "http://helix.test/runs",
+            commentTrigger: "/helix",
+            webhookEnabled: true,
+            baseUrl: "http://issues.test",
+          });
+        }
+        if (rest === "issues" && init?.method === "POST") {
           const payload = JSON.parse(String(init.body)) as {
             title: string;
             body: string;
             labels: string[];
+            sourceCardId?: string;
+            projectsCallbackUrl?: string;
           };
           const issue = {
             id: nextRemoteIssueId++,
@@ -48,13 +72,16 @@ describe("acme-projects API", () => {
             body: payload.body,
             status: "open" as const,
             labels: payload.labels,
-            url: `http://issues.test/issues/${nextRemoteIssueId - 1}`,
+            projectId: 1,
+            sourceCardId: payload.sourceCardId,
+            projectsCallbackUrl: payload.projectsCallbackUrl,
+            url: `http://issues.test/?project=default&issue=${nextRemoteIssueId - 1}`,
           };
           remoteIssues.set(issue.id, issue);
           return Response.json({ issue, delivery: null }, { status: 201 });
         }
-        const match = url.pathname.match(/^\/api\/issues\/(\d+)$/);
-        const issue = match ? remoteIssues.get(Number(match[1])) : undefined;
+        const issueMatch = rest.match(/^issues\/(\d+)$/);
+        const issue = issueMatch ? remoteIssues.get(Number(issueMatch[1])) : undefined;
         if (!issue) return Response.json({ error: "Issue not found" }, { status: 404 });
         if (!init?.method || init.method === "GET") return Response.json(issue);
         if (init.method === "PATCH") {
@@ -98,9 +125,11 @@ describe("acme-projects API", () => {
     const project = migrated.prepare("SELECT * FROM projects WHERE id = 1").get() as {
       repository_path: string;
       issues_url: string;
+      issues_project_ref: string;
     };
     assert.equal(project.repository_path, "");
     assert.equal(project.issues_url, "");
+    assert.equal(project.issues_project_ref, "");
     migrated.close();
     rmSync(legacyDir, { recursive: true, force: true });
   });
@@ -241,6 +270,7 @@ describe("acme-projects API", () => {
         name: "Integrated project",
         repositoryPath: "/workspace/product",
         issuesUrl: "http://issues.test",
+        issuesProjectRef: "default",
       })
       .expect(201);
     const card = await createTestCard(project.body.id, "Shared customer notes", "ideas");
@@ -262,7 +292,11 @@ describe("acme-projects API", () => {
     assert.match(issue.body, /ACM-/);
     assert.equal(submitted.body.card.columnId, "ready");
     assert.equal(submitted.body.attempt.triggerLabel, "trigger");
-    assert.equal(submitted.body.attempt.issueUrl, `http://issues.test/?issue=${issueId}`);
+    assert.equal(submitted.body.attempt.issueUrl, `http://issues.test/?project=default&issue=${issueId}`);
+    assert.equal(submitted.body.attempt.issuesProjectRef, "default");
+    assert.equal(issue.sourceCardId, String(submitted.body.card.id));
+    assert.match(String(issue.projectsCallbackUrl), /\/api\/webhooks\/issues$/);
+    assert.equal(issue.projectsCallbackUrl, "http://projects.test/api/webhooks/issues");
     assert.equal(submitted.body.card.activeImplementation.issueId, issueId);
 
     await request(app).post(`/api/cards/${card.id}/submit-issue`).expect(409);
@@ -283,6 +317,7 @@ describe("acme-projects API", () => {
         name: "Integrated project again",
         repositoryPath: "/workspace/product",
         issuesUrl: "http://issues.test",
+        issuesProjectRef: "default",
       })
       .expect(201);
     const card2 = await request(app)
@@ -315,6 +350,7 @@ describe("acme-projects API", () => {
       .send({
         name: "Pathless project",
         issuesUrl: "http://issues.test",
+        issuesProjectRef: "default",
       })
       .expect(201);
     assert.equal(project.body.repositoryPath, "");
@@ -338,6 +374,7 @@ describe("acme-projects API", () => {
         name: "Triggered project",
         repositoryPath: "/workspace/triggered",
         issuesUrl: "http://issues.test",
+        issuesProjectRef: "default",
       })
       .expect(201);
     const card = await createTestCard(project.body.id, "Authorized work", "ready");
@@ -368,6 +405,7 @@ describe("acme-projects API", () => {
         name: "Unsafe project",
         repositoryPath: "/workspace/unsafe",
         issuesUrl: "http://issues.test",
+        issuesProjectRef: "default",
       })
       .expect(201);
     const card = await createTestCard(project.body.id, "Unsafe handoff", "ready");
@@ -380,6 +418,87 @@ describe("acme-projects API", () => {
     assert.match(response.body.error, /different trigger label/);
     assert.equal(remoteIssues.size, issueCount);
     remoteTriggerLabel = "trigger";
+  });
+
+  it("projects Issues lifecycle webhooks onto implementation columns", async () => {
+    const project = await request(app)
+      .post("/api/projects")
+      .send({
+        name: "Lifecycle board",
+        issuesUrl: "http://issues.test",
+        issuesProjectRef: "default",
+      })
+      .expect(201);
+    const card = await createTestCard(project.body.id, "Lifecycle card", "ready");
+    const submitted = await request(app)
+      .post(`/api/cards/${card.id}/submit-issue`)
+      .expect(201);
+    const issueId = submitted.body.attempt.issueId as number;
+    const sourceCardId = String(card.id);
+
+    const started = await request(app)
+      .post("/api/webhooks/issues")
+      .send({
+        event: "implementation.started",
+        issueId,
+        sourceCardId,
+        externalEventId: `issue:${issueId}:started`,
+      })
+      .expect(200);
+    assert.equal(started.body.moved, true);
+    assert.equal(started.body.columnId, "in_progress");
+    assert.equal(started.body.card.columnId, "in_progress");
+
+    const startedAgain = await request(app)
+      .post("/api/webhooks/issues")
+      .send({
+        event: "implementation.started",
+        issueId,
+        sourceCardId,
+        externalEventId: `issue:${issueId}:started-again`,
+      })
+      .expect(200);
+    assert.equal(startedAgain.body.moved, false);
+    assert.equal(startedAgain.body.columnId, "in_progress");
+
+    const review = await request(app)
+      .post("/api/webhooks/issues")
+      .send({
+        event: "implementation.in_review",
+        issueId,
+        sourceCardId,
+        pullRequestId: 9,
+      })
+      .expect(200);
+    assert.equal(review.body.columnId, "in_review");
+
+    const completed = await request(app)
+      .post("/api/webhooks/issues")
+      .send({
+        event: "implementation.completed",
+        issueId,
+        sourceCardId,
+      })
+      .expect(200);
+    assert.equal(completed.body.columnId, "done");
+
+    await request(app)
+      .post("/api/webhooks/issues")
+      .send({
+        event: "implementation.in_review",
+        issueId,
+        sourceCardId,
+      })
+      .expect(200)
+      .expect((res) => {
+        assert.equal(res.body.moved, false);
+        assert.equal(res.body.columnId, "done");
+      });
+
+    await request(app)
+      .post(`/api/cards/${card.id}/move`)
+      .send({ columnId: "exploring" })
+      .expect(409);
   });
 
   it("deleting a project cascades to cards and discussion", async () => {
