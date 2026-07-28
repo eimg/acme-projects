@@ -2,6 +2,8 @@ import type { Card, Project } from "./types.js";
 
 export type FetchFn = typeof fetch;
 
+const DEFAULT_TRUSTED_ISSUES_ORIGIN = "http://127.0.0.1:8320";
+
 interface AcmeIssue {
   id: number;
   title: string;
@@ -27,12 +29,14 @@ export async function createProjectIssue(
   fetchFn: FetchFn,
   project: Project,
   card: Card,
-  opts: { projectsCallbackUrl: string },
+  opts: { projectsCallbackUrl: string; authToken?: string; trustedOrigins?: string[] },
 ): Promise<{ issue: AcmeIssue; snapshot: string; triggerLabel: string; issuesProjectRef: string }> {
   const baseUrl = normalizeIssuesUrl(project.issuesUrl);
   const projectRef = normalizeIssuesProjectRef(project.issuesProjectRef);
   const issuesProject = await readIssuesProject(
-    await fetchFn(issuesProjectUrl(baseUrl, projectRef)),
+    await fetchFn(issuesProjectUrl(baseUrl, projectRef), {
+      headers: authHeaders(baseUrl, opts.authToken, false, opts.trustedOrigins),
+    }),
   );
   if (issuesProject.labelFilter === "acme-projects") {
     throw new IntegrationConflict(
@@ -42,7 +46,7 @@ export async function createProjectIssue(
   const snapshot = formatImplementationSnapshot(project, card, issuesProject);
   const response = await fetchFn(issuesProjectUrl(baseUrl, projectRef, "/issues"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(baseUrl, opts.authToken, true, opts.trustedOrigins),
     body: JSON.stringify({
       title: `[${project.name}] ${card.title}`,
       body: snapshot,
@@ -73,11 +77,14 @@ export async function withdrawProjectIssue(
   issuesProjectRef: string,
   issueId: number,
   triggerLabel: string,
+  authToken?: string,
+  trustedOrigins?: string[],
 ): Promise<AcmeIssue> {
   const baseUrl = normalizeIssuesUrl(issuesUrl);
   const projectRef = normalizeIssuesProjectRef(issuesProjectRef);
   const currentResponse = await fetchFn(
     issuesProjectUrl(baseUrl, projectRef, `/issues/${issueId}`),
+    { headers: authHeaders(baseUrl, authToken, false, trustedOrigins) },
   );
   const current = await readIssue(currentResponse, "read issue");
   if (current.labels.includes(triggerLabel)) {
@@ -93,13 +100,51 @@ export async function withdrawProjectIssue(
 
   const response = await fetchFn(issuesProjectUrl(baseUrl, projectRef, `/issues/${issueId}`), {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(baseUrl, authToken, true, trustedOrigins),
     body: JSON.stringify({ status: "closed" }),
   });
   return (await readIssueResponse(response, "close issue")).issue;
 }
 
 export class IntegrationConflict extends Error {}
+
+function authHeaders(
+  destination: string,
+  token?: string,
+  json = false,
+  configuredOrigins?: string[],
+): Record<string, string> {
+  const value = token?.trim();
+  if (value) assertTrustedIssuesDestination(destination, configuredOrigins);
+  return {
+    ...(json ? { "Content-Type": "application/json" } : {}),
+    ...(value ? { Authorization: `Bearer ${value}` } : {}),
+  };
+}
+
+export function trustedIssuesOrigins(
+  raw = process.env.ACME_TRUSTED_ISSUES_ORIGINS ?? DEFAULT_TRUSTED_ISSUES_ORIGIN,
+): string[] {
+  return raw.split(",").map((value) => value.trim()).filter(Boolean).map(normalizeOrigin);
+}
+
+function assertTrustedIssuesDestination(destination: string, configured?: string[]): void {
+  const origin = normalizeOrigin(destination);
+  const allowed = configured?.map(normalizeOrigin) ?? trustedIssuesOrigins();
+  if (!allowed.includes(origin)) {
+    throw new Error(`Refusing to send ACME_ISSUES_TOKEN to untrusted origin: ${origin}`);
+  }
+}
+
+function normalizeOrigin(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+    return url.origin;
+  } catch {
+    throw new Error(`Invalid trusted Issues origin: ${value}`);
+  }
+}
 
 export function normalizeIssuesUrl(value: string): string {
   let url: URL;

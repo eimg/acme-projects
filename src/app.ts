@@ -38,6 +38,15 @@ import {
   updateProject,
   withdrawImplementationAttempt,
 } from "./store.js";
+import {
+  authenticateRequests,
+  authorizeProjectsRequest,
+  authMode as resolveAuthMode,
+  principalFrom,
+  sameOriginWrites,
+  type PrincipalResolver,
+} from "./auth.js";
+import { identityBaseUrl, type AuthMode } from "acme-identity/client";
 
 const columnIds = new Set<string>(BOARD_COLUMNS.map((column) => column.id));
 const manualColumnIds = new Set<ColumnId>(["ideas", "exploring", "ready"]);
@@ -45,15 +54,42 @@ const manualColumnIds = new Set<ColumnId>(["ideas", "exploring", "ready"]);
 export function createApp({
   db,
   fetchFn = fetch,
+  identityFetchFn = fetch,
+  principalResolver,
+  authMode = resolveAuthMode(),
+  issuesToken = process.env.ACME_ISSUES_TOKEN,
+  trustedIssuesOrigins,
 }: {
   db: Database.Database;
   fetchFn?: FetchFn;
+  identityFetchFn?: typeof fetch;
+  principalResolver?: PrincipalResolver;
+  authMode?: AuthMode;
+  issuesToken?: string;
+  trustedIssuesOrigins?: string[];
 }): Express {
   const app = express();
+  app.use("/api", (_req, res, next) => {
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("x-content-type-options", "nosniff");
+    res.setHeader("referrer-policy", "no-referrer");
+    next();
+  });
   app.use(express.json());
+  app.use("/api", sameOriginWrites());
   app.use(webAssets());
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
+  app.get("/api/auth/session", authenticateRequests(principalResolver, authMode), (_req, res) => {
+    res.json({ schemaVersion: "acme.session.v1", authMode, principal: principalFrom(res) });
+  });
+  app.post("/api/auth/session", async (req, res) => {
+    await proxyIdentitySession(identityFetchFn, req, res, "POST");
+  });
+  app.delete("/api/auth/session", async (req, res) => {
+    await proxyIdentitySession(identityFetchFn, req, res, "DELETE");
+  });
+  app.use("/api", authenticateRequests(principalResolver, authMode), authorizeProjectsRequest);
   app.get("/api/columns", (_req, res) => res.json(BOARD_COLUMNS));
 
   app.get("/api/projects", (_req, res) => res.json(listProjects(db)));
@@ -245,7 +281,11 @@ export function createApp({
         fetchFn,
         project,
         card,
-        { projectsCallbackUrl: issuesLifecycleWebhookUrl() },
+        {
+          projectsCallbackUrl: issuesLifecycleWebhookUrl(),
+          authToken: issuesToken,
+          trustedOrigins: trustedIssuesOrigins,
+        },
       );
       const attempt = createImplementationAttempt(db, card.id, {
         issueId: issue.id,
@@ -308,6 +348,8 @@ export function createApp({
         attempt.issuesProjectRef,
         attempt.issueId,
         attempt.triggerLabel,
+        issuesToken,
+        trustedIssuesOrigins,
       );
       withdrawImplementationAttempt(db, attempt.id);
       const updated = moveCard(db, card.id, "exploring", Number.MAX_SAFE_INTEGER);
@@ -345,6 +387,33 @@ export function createApp({
 
   app.get("*path", webIndex());
   return app;
+}
+
+async function proxyIdentitySession(
+  fetchFn: typeof fetch,
+  req: express.Request,
+  res: express.Response,
+  method: "POST" | "DELETE",
+): Promise<void> {
+  try {
+    const response = await fetchFn(`${identityBaseUrl()}/api/session`, {
+      method,
+      headers: {
+        ...(method === "POST" ? { "content-type": "application/json" } : {}),
+        ...(req.headers.cookie ? { cookie: req.headers.cookie } : {}),
+      },
+      body: method === "POST" ? JSON.stringify(req.body ?? {}) : undefined,
+      signal: AbortSignal.timeout(3_000),
+    });
+    const cookie = response.headers.get("set-cookie");
+    if (cookie) res.setHeader("set-cookie", cookie);
+    const body = await response.json().catch(() => ({ error: response.statusText }));
+    res.status(response.status).json(body);
+  } catch (error) {
+    res.status(503).json({
+      error: error instanceof Error ? error.message : "Identity service unavailable",
+    });
+  }
 }
 
 export function startServer({

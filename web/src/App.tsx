@@ -1,12 +1,75 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Board, Card, CardComment, ColumnId, Project } from "../../src/types";
+import { hasPermission } from "acme-identity/permissions";
+import type { AuthMode, Principal } from "acme-identity/types";
 import { api, formatTime } from "./api";
 
 type Dialog = "project" | "edit-project" | "card" | null;
 
+type AuthSession = {
+  schemaVersion: "acme.session.v1";
+  authMode: AuthMode;
+  principal: Principal;
+};
+
+type ProjectsAuth = {
+  session: AuthSession;
+  canWrite: boolean;
+  signOut: () => void;
+  signingOut: boolean;
+};
+
+const ProjectsAuthContext = createContext<ProjectsAuth | null>(null);
+
+function useProjectsAuth(): ProjectsAuth {
+  const value = useContext(ProjectsAuthContext);
+  if (!value) throw new Error("Projects auth context is unavailable");
+  return value;
+}
+
 export function App() {
   const queryClient = useQueryClient();
+  const auth = useQuery({
+    queryKey: ["auth-session"],
+    queryFn: () => api<AuthSession>("/api/auth/session"),
+    retry: false,
+  });
+  const signOut = useMutation({
+    mutationFn: () => api("/api/auth/session", { method: "DELETE" }),
+    onSuccess: async () => {
+      queryClient.clear();
+      await auth.refetch();
+    },
+  });
+
+  if (auth.isLoading) return <AuthLoading />;
+  if (!auth.data?.principal) {
+    return (
+      <Login
+        error={auth.error?.message === "Authentication required" ? undefined : auth.error?.message}
+        onSignedIn={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["auth-session"] });
+        }}
+      />
+    );
+  }
+
+  return (
+    <ProjectsAuthContext.Provider value={{
+      session: auth.data,
+      canWrite: hasPermission(auth.data.principal, "projects.write"),
+      signOut: () => signOut.mutate(),
+      signingOut: signOut.isPending,
+    }}>
+      <AuthenticatedApp />
+    </ProjectsAuthContext.Provider>
+  );
+}
+
+function AuthenticatedApp() {
+  const queryClient = useQueryClient();
+  const { canWrite } = useProjectsAuth();
   const projects = useQuery({
     queryKey: ["projects"],
     queryFn: () => api<Project[]>("/api/projects"),
@@ -57,26 +120,26 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <Header onNewProject={() => setDialog("project")} />
+      <Header onNewProject={canWrite ? () => setDialog("project") : undefined} />
       <div className="workspace">
         <ProjectSidebar
           projects={projects.data ?? []}
           selectedId={selectedProjectId}
           onSelect={setSelectedProjectId}
-          onNew={() => setDialog("project")}
+          onNew={canWrite ? () => setDialog("project") : undefined}
         />
         <main className="main-content">
           {projects.isLoading ? (
             <CenteredMessage title="Opening your workspace…" />
           ) : !projects.data?.length ? (
-            <Welcome onCreate={() => setDialog("project")} />
+            <Welcome onCreate={canWrite ? () => setDialog("project") : undefined} />
           ) : board.data ? (
             <>
               <BoardHeader
                 project={board.data.project}
                 cardCount={board.data.columns.reduce((sum, column) => sum + column.cards.length, 0)}
-                onEdit={() => setDialog("edit-project")}
-                onDelete={() => {
+                onEdit={canWrite ? () => setDialog("edit-project") : undefined}
+                onDelete={canWrite ? () => {
                   if (
                     confirm(
                       `Delete “${board.data.project.name}” and all of its cards?\n\nLinked issues are left alone; only this project board is removed.`,
@@ -84,15 +147,15 @@ export function App() {
                   ) {
                     deleteProject.mutate(board.data.project.id);
                   }
-                }}
+                } : undefined}
               />
               <ProjectBoard
                 board={board.data}
                 onCard={setSelectedCardId}
-                onNewCard={(columnId) => {
+                onNewCard={canWrite ? (columnId) => {
                   setNewCardColumn(columnId);
                   setDialog("card");
-                }}
+                } : undefined}
                 onToast={showToast}
               />
             </>
@@ -104,7 +167,7 @@ export function App() {
         </main>
       </div>
 
-      {dialog === "project" && (
+      {canWrite && dialog === "project" && (
         <NewProjectDialog
           onClose={() => setDialog(null)}
           onCreated={(project) => {
@@ -114,7 +177,7 @@ export function App() {
           }}
         />
       )}
-      {dialog === "edit-project" && board.data && (
+      {canWrite && dialog === "edit-project" && board.data && (
         <ProjectSettingsDialog
           project={board.data.project}
           onClose={() => setDialog(null)}
@@ -124,7 +187,7 @@ export function App() {
           }}
         />
       )}
-      {dialog === "card" && selectedProjectId && (
+      {canWrite && dialog === "card" && selectedProjectId && (
         <NewCardDialog
           projectId={selectedProjectId}
           columnId={newCardColumn}
@@ -153,7 +216,8 @@ export function App() {
   );
 }
 
-function Header({ onNewProject }: { onNewProject: () => void }) {
+function Header({ onNewProject }: { onNewProject?: () => void }) {
+  const { session, signOut, signingOut } = useProjectsAuth();
   return (
     <header className="app-header">
       <div className="brand">
@@ -163,9 +227,18 @@ function Header({ onNewProject }: { onNewProject: () => void }) {
           <span>Shape ideas into work worth doing</span>
         </div>
       </div>
-      <button className="button primary" onClick={onNewProject}>
+      <div className="header-actions">
+        <div className="identity-chip" title={session.principal.permissions.join(", ")}>
+          <strong>{session.principal.displayName}</strong>
+          <span>{session.principal.roles.join(", ") || session.principal.kind}</span>
+        </div>
+        {session.authMode === "local" && (
+          <button className="button ghost" disabled={signingOut} onClick={signOut}>Sign out</button>
+        )}
+        {onNewProject && <button className="button primary" onClick={onNewProject}>
         <PlusIcon /> New project
-      </button>
+        </button>}
+      </div>
     </header>
   );
 }
@@ -179,13 +252,13 @@ function ProjectSidebar({
   projects: Project[];
   selectedId: number | null;
   onSelect: (id: number) => void;
-  onNew: () => void;
+  onNew?: () => void;
 }) {
   return (
     <aside className="project-sidebar">
       <div className="sidebar-heading">
         <span>Projects</span>
-        <button className="icon-button" onClick={onNew} aria-label="New project"><PlusIcon /></button>
+        {onNew && <button className="icon-button" onClick={onNew} aria-label="New project"><PlusIcon /></button>}
       </div>
       <nav className="project-list">
         {projects.map((project) => (
@@ -218,8 +291,8 @@ function BoardHeader({
 }: {
   project: Project;
   cardCount: number;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <section className="board-header">
@@ -242,8 +315,8 @@ function BoardHeader({
       </div>
       <div className="board-meta">
         <span>{cardCount} {cardCount === 1 ? "card" : "cards"}</span>
-        <button className="text-button" onClick={onEdit}>Project settings</button>
-        <button className="text-button danger" onClick={onDelete}>Delete project</button>
+        {onEdit && <button className="text-button" onClick={onEdit}>Project settings</button>}
+        {onDelete && <button className="text-button danger" onClick={onDelete}>Delete project</button>}
       </div>
     </section>
   );
@@ -257,9 +330,10 @@ function ProjectBoard({
 }: {
   board: Board;
   onCard: (id: number) => void;
-  onNewCard: (columnId: ColumnId) => void;
+  onNewCard?: (columnId: ColumnId) => void;
   onToast: (message: string) => void;
 }) {
+  const { canWrite } = useProjectsAuth();
   const queryClient = useQueryClient();
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const move = useMutation({
@@ -276,6 +350,7 @@ function ProjectBoard({
 
   const drop = (event: React.DragEvent, columnId: ColumnId, index: number) => {
     event.preventDefault();
+    if (!canWrite) return;
     const id = Number(event.dataTransfer.getData("text/card-id"));
     setDraggingId(null);
     if (!Number.isInteger(id) || id <= 0) return;
@@ -302,7 +377,7 @@ function ProjectBoard({
           <section
             className={`board-column column-${column.id}`}
             key={column.id}
-            onDragOver={(event) => event.preventDefault()}
+            onDragOver={(event) => { if (canWrite) event.preventDefault(); }}
             onDrop={(event) => drop(event, column.id, column.cards.length)}
           >
             <header className="column-header">
@@ -317,7 +392,7 @@ function ProjectBoard({
               {column.cards.map((card, index) => (
                 <div
                   key={card.id}
-                  onDragOver={(event) => event.preventDefault()}
+                  onDragOver={(event) => { if (canWrite) event.preventDefault(); }}
                   onDrop={(event) => {
                     event.stopPropagation();
                     drop(event, column.id, index);
@@ -325,6 +400,7 @@ function ProjectBoard({
                 >
                   <BoardCard
                     card={card}
+                    draggable={canWrite}
                     dragging={draggingId === card.id}
                     onOpen={() => onCard(card.id)}
                     onDragStart={(event) => {
@@ -344,7 +420,7 @@ function ProjectBoard({
                 </div>
               )}
             </div>
-            {column.id !== "in_progress" && column.id !== "in_review" && column.id !== "done" && (
+            {onNewCard && column.id !== "in_progress" && column.id !== "in_review" && column.id !== "done" && (
               <button className="add-card" onClick={() => onNewCard(column.id)}>
                 <PlusIcon /> Add card
               </button>
@@ -359,12 +435,14 @@ function ProjectBoard({
 function BoardCard({
   card,
   dragging,
+  draggable,
   onOpen,
   onDragStart,
   onDragEnd,
 }: {
   card: Card;
   dragging: boolean;
+  draggable: boolean;
   onOpen: () => void;
   onDragStart: (event: React.DragEvent) => void;
   onDragEnd: () => void;
@@ -372,7 +450,7 @@ function BoardCard({
   return (
     <article
       className={`board-card ${dragging ? "dragging" : ""}`}
-      draggable
+      draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onOpen}
@@ -639,6 +717,7 @@ function CardDetail({
   onToast: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const { canWrite } = useProjectsAuth();
   const card = useQuery({
     queryKey: ["card", cardId],
     queryFn: () => api<Card>(`/api/cards/${cardId}`),
@@ -727,6 +806,7 @@ function CardDetail({
           <input
             className="title-input"
             value={draft.title ?? ""}
+            readOnly={!canWrite}
             onChange={(event) => update("title", event.target.value)}
             aria-label="Card title"
           />
@@ -752,12 +832,14 @@ function CardDetail({
                   returnToExploration.mutate();
                 }
               }}
+              canWrite={canWrite}
             />
           )}
           <Field label="The idea" hint="Keep the current shared understanding here.">
             <textarea
               rows={6}
               value={draft.description ?? ""}
+              readOnly={!canWrite}
               onChange={(event) => update("description", event.target.value)}
               placeholder="What are we exploring, and why might it matter?"
             />
@@ -767,6 +849,7 @@ function CardDetail({
               <textarea
                 rows={5}
                 value={draft.decisions ?? ""}
+                readOnly={!canWrite}
                 onChange={(event) => update("decisions", event.target.value)}
                 placeholder="What have we agreed?"
               />
@@ -775,6 +858,7 @@ function CardDetail({
               <textarea
                 rows={5}
                 value={draft.openQuestions ?? ""}
+                readOnly={!canWrite}
                 onChange={(event) => update("openQuestions", event.target.value)}
                 placeholder="What still needs an answer?"
               />
@@ -784,12 +868,13 @@ function CardDetail({
             <textarea
               rows={4}
               value={draft.acceptanceNotes ?? ""}
+              readOnly={!canWrite}
               onChange={(event) => update("acceptanceNotes", event.target.value)}
               placeholder="Describe a successful outcome…"
             />
           </Field>
           <FormError error={save.error} />
-          <div className="detail-actions">
+          {canWrite && <div className="detail-actions">
             <button
               className="text-button danger"
               onClick={() => {
@@ -805,7 +890,7 @@ function CardDetail({
             >
               {save.isPending ? "Saving…" : "Save changes"}
             </button>
-          </div>
+          </div>}
         </div>
         <Discussion
           cardId={cardId}
@@ -832,6 +917,7 @@ function ImplementationPanel({
   error,
   onSubmit,
   onReturn,
+  canWrite,
 }: {
   card: Card;
   project: Project;
@@ -840,6 +926,7 @@ function ImplementationPanel({
   error: Error | null;
   onSubmit: () => void;
   onReturn: () => void;
+  canWrite: boolean;
 }) {
   const attempt = card.activeImplementation;
   if (attempt) {
@@ -854,9 +941,9 @@ function ImplementationPanel({
             {" "}was created without the <code>{attempt.triggerLabel}</code> label. Add it in the issues system when ready.
           </p>
           <FormError error={error} />
-          <button className="button ghost small" disabled={withdrawing} onClick={onReturn}>
+          {canWrite && <button className="button ghost small" disabled={withdrawing} onClick={onReturn}>
             {withdrawing ? "Withdrawing…" : "Return to exploration"}
-          </button>
+          </button>}
         </div>
       </section>
     );
@@ -881,13 +968,13 @@ function ImplementationPanel({
           <p className="configuration-warning">Set the {missing.join(" and ")} in Project settings first.</p>
         )}
         <FormError error={error} />
-        <button
+        {canWrite && <button
           className="button primary small"
           disabled={submitting || missing.length > 0 || !card.title.trim()}
           onClick={onSubmit}
         >
           <SendIcon /> {submitting ? "Submitting…" : "Submit as issue"}
-        </button>
+        </button>}
       </div>
     </section>
   );
@@ -904,11 +991,12 @@ function Discussion({
   loading: boolean;
   onAdded: () => Promise<void>;
 }) {
+  const { canWrite, session } = useProjectsAuth();
   const [body, setBody] = useState("");
   const mutation = useMutation({
     mutationFn: () => api<CardComment>(`/api/cards/${cardId}/comments`, {
       method: "POST",
-      body: JSON.stringify({ body, author: "You" }),
+      body: JSON.stringify({ body, author: session.principal.displayName }),
     }),
     onSuccess: async () => {
       setBody("");
@@ -948,7 +1036,7 @@ function Discussion({
           </div>
         )}
       </div>
-      <form
+      {canWrite && <form
         className="comment-composer"
         onSubmit={(event) => {
           event.preventDefault();
@@ -964,12 +1052,12 @@ function Discussion({
         <button className="button small" disabled={!body.trim() || mutation.isPending}>
           Comment
         </button>
-      </form>
+      </form>}
     </aside>
   );
 }
 
-function Welcome({ onCreate }: { onCreate: () => void }) {
+function Welcome({ onCreate }: { onCreate?: () => void }) {
   return (
     <section className="welcome">
       <div className="welcome-art" aria-hidden="true">
@@ -979,14 +1067,62 @@ function Welcome({ onCreate }: { onCreate: () => void }) {
       </div>
       <div className="eyebrow">A place to think together</div>
       <h1>Start with an idea,<br />not a ticket.</h1>
-      <p>Create a project board to explore possibilities, record decisions, and shape work before implementation begins.</p>
-      <button className="button primary large" onClick={onCreate}><PlusIcon /> Create your first project</button>
+      <p>{onCreate
+        ? "Create a project board to explore possibilities, record decisions, and shape work before implementation begins."
+        : "No project boards are available. Ask someone with Projects write access to create one."}</p>
+      {onCreate && <button className="button primary large" onClick={onCreate}><PlusIcon /> Create your first project</button>}
     </section>
   );
 }
 
 function CenteredMessage({ title, body }: { title: string; body?: string }) {
   return <div className="centered-message"><strong>{title}</strong>{body && <p>{body}</p>}</div>;
+}
+
+function AuthLoading() {
+  return (
+    <div className="auth-page">
+      <div className="auth-card"><p>Resolving Acme identity…</p></div>
+    </div>
+  );
+}
+
+function Login({ error, onSignedIn }: { error?: string; onSignedIn: () => Promise<void> }) {
+  const [message, setMessage] = useState(error ?? "");
+  const login = useMutation({
+    mutationFn: (credentials: { username: string; password: string }) =>
+      api("/api/auth/session", { method: "POST", body: JSON.stringify(credentials) }),
+    onSuccess: onSignedIn,
+    onError: (loginError: Error) => setMessage(loginError.message),
+  });
+  return (
+    <div className="auth-page">
+      <form
+        className="auth-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          login.mutate({
+            username: String(form.get("username") ?? ""),
+            password: String(form.get("password") ?? ""),
+          });
+        }}
+      >
+        <BrandMark />
+        <div><p className="auth-eyebrow">Acme Identity</p><h1>Sign in to Acme Projects</h1></div>
+        <Field label="Username">
+          <input name="username" autoComplete="username" autoFocus required />
+        </Field>
+        <Field label="Password">
+          <input name="password" type="password" autoComplete="current-password" required />
+        </Field>
+        {message && <p className="form-error" role="alert">{message}</p>}
+        <button className="button primary" type="submit" disabled={login.isPending}>
+          {login.isPending ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 function Dialog({

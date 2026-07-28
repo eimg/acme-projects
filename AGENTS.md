@@ -6,9 +6,10 @@ Acme Projects is a local board for collaborative feature exploration. It is inte
 
 | Project | Local path | Responsibility |
 |---|---|---|
+| Acme Identity | `~/Desktop/acme/acme-identity` | Shared suite principals, browser sessions, roles, and capability permissions. |
 | Primer | `~/Desktop/acme/primer` | Knowledge product and fictional Acme evidence corpus; outside the Issues → Helix runtime loop. |
 | Prelude | `~/Desktop/acme/prelude` | New-project inception and bootstrap artifact export before a Helix repo exists. |
-| Helix | `~/Desktop/acme/helix` | Agent workflow control plane that will eventually receive authorized implementation work. |
+| Helix | `~/Desktop/acme/helix` | Agent workflow control plane reached through Acme Issues for authorized implementation work. |
 | Acme Issues | `~/Desktop/acme/acme-issues` | Concrete bug, issue, local PR, and review lifecycle. |
 | Acme Projects | `~/Desktop/acme/acme-projects` | Feature ideas, collaborative exploration, decisions, and implementation intent for existing Helix repos. |
 | Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application for agent implementation and verification. |
@@ -65,3 +66,8 @@ The current and intended contract is documented in
 4. Keep the visual style light and distinct while retaining the typography and compact spacing conventions shared with Acme Issues.
 5. Preserve unrelated user changes.
 6. Before committing cross-cutting changes, run `npm run verify` (typecheck, test, and build).
+7. Keep `ACME_AUTH_MODE=off` as the standalone/test default. In `local`, gate
+   reads on `projects.read` or `projects.write`, mutations on `projects.write`,
+   and never branch on fixed role names. Require `projects.write` on
+   `POST /api/webhooks/issues`; machine callers use scoped bearer tokens, and
+   outbound tokens are attached only for configured trusted Issues origins.

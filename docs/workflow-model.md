@@ -5,6 +5,12 @@ the nested multi-project Issues API (`issuesUrl` + project slug/id).
 Issues → Projects lifecycle webhooks project `In progress` / `In review` /
 `Done`. Automatic triggering remains planned.
 
+With suite auth enabled, browser actions use Acme Identity sessions and
+`projects.read` / `projects.write`. Server-side calls to Acme Issues use the
+optional `ACME_ISSUES_TOKEN`; inbound Issues lifecycle callbacks retain their
+machine-auth boundary. The outbound token is sent only to an origin configured
+in `ACME_TRUSTED_ISSUES_ORIGINS`.
+
 Acme Projects owns collaborative feature intent for repositories that already
 exist. Brand-new project inception belongs to **Prelude**, which drafts freeform
 docs and exports bootstrap artifacts for Helix empty-workspace bootstrap;
@@ -68,7 +74,7 @@ Ready card
   → linked issue labeled acme-projects
   → human adds trigger
   → accepted Helix run
-  → In progress (planned projection)
+  → authenticated Issues callback moves the card to In progress
 ```
 
 A later project-level policy may automatically request implementation when a

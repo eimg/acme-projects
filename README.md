@@ -6,15 +6,16 @@ Acme Projects deliberately sits between an idea and an issue tracker. Projects d
 
 ## Acme development testbed
 
-Acme Projects is one of six related projects. They remain separate products
+Acme Projects is one of seven related projects. They remain separate products
 with separate responsibilities.
 
 | Project | Role |
 |---|---|
+| **[Acme Identity](https://github.com/eimg/acme-identity)** | Suite auth; Projects resolves principals and enforces capability permissions. |
 | **[Primer](https://github.com/eimg/primer)** | Knowledge product and fictional Acme evidence corpus; currently outside the Issues → Helix runtime loop. |
 | **[Prelude](https://github.com/eimg/prelude)** | New-project inception; drafts freeform docs and exports bootstrap artifacts before a Helix repo exists. |
 | **[Helix](https://github.com/eimg/helix)** | Agent workflow control plane that receives work and orchestrates changes. |
-| **[Acme Issues](https://github.com/eimg/acme-issues)** | Concrete issue, local PR, and review lifecycle; the planned implementation intermediary for Acme Projects. |
+| **[Acme Issues](https://github.com/eimg/acme-issues)** | Concrete issue, local PR, and review lifecycle; the implementation intermediary for Acme Projects. |
 | **[Acme Projects](https://github.com/eimg/acme-projects)** | Feature ideas, collaborative exploration, decisions, and implementation readiness for existing Helix repos. |
 | **[Acme Todo](https://github.com/eimg/acme-todo)** | Disposable target application used for agent implementation and verification. |
 
@@ -30,7 +31,43 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:8330](http://127.0.0.1:8330).
+Open [http://127.0.0.1:8321](http://127.0.0.1:8321).
+
+### Authentication and permissions
+
+Acme Projects defaults to `ACME_AUTH_MODE=off`, which resolves an admin
+development principal locally. This keeps standalone development and ordinary
+feature tests independent of Acme Identity. For real sign-in and role checks:
+
+```bash
+# in ../acme-identity
+ACME_AUTH_MODE=local npm run dev
+
+# in this repository
+ACME_AUTH_MODE=local ACME_IDENTITY_URL=http://127.0.0.1:8316 npm run dev
+```
+
+The browser signs in through Projects, which forwards the session request to
+Identity. `projects.read` is read-only; `projects.write` can both read and
+mutate. The API and UI check permission strings rather than role names, so
+future custom roles work without code changes. The built-in `viewer` is
+read-only, while `member`, `operator`, and `admin` can edit boards.
+
+When Acme Issues also runs with local auth, mint a narrowly scoped service token
+containing `issues.write`, then provide it to Projects:
+
+```bash
+ACME_ISSUES_TOKEN=svc_... ACME_AUTH_MODE=local npm run dev
+```
+
+Projects forwards that token only on its server-side Issues handoff requests.
+It is attached only when the destination matches `ACME_TRUSTED_ISSUES_ORIGINS`
+(default `http://127.0.0.1:8320`); a project cannot redirect the credential by
+changing its Issues URL.
+The inbound `POST /api/webhooks/issues` lifecycle callback requires
+`projects.write`. In local auth mode, Acme Issues sends its service credential
+from `ACME_PROJECTS_TOKEN`. Projects uses `ACME_ISSUES_TOKEN` for its own
+authenticated Issues API calls.
 
 Data is stored in `./data/projects.db`. Override the location with:
 
@@ -112,7 +149,7 @@ Acme Projects does not call Helix directly. See [`docs/workflow-model.md`](./doc
 
 ```bash
 npm run dev           # serve with auto-restart; UI is served from web/ over HMR
-npm run dev:web       # standalone Vite development server; proxies /api to port 8330
+npm run dev:web       # standalone Vite development server; proxies /api to port 8321
 npm run typecheck
 npm test              # API and persistence tests
 npm run build         # build server and browser UI
@@ -123,7 +160,7 @@ npm start             # run the compiled CLI
 The compiled CLI also accepts:
 
 ```bash
-acme-projects serve [--port 8330] [--host 127.0.0.1]
+acme-projects serve [--port 8321] [--host 127.0.0.1]
 ```
 
 ## Technology

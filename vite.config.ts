@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://127.0.0.1:8330",
+      "/api": "http://127.0.0.1:8321",
     },
   },
 });

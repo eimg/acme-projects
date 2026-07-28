@@ -1,4 +1,4 @@
-export const DEFAULT_PORT = 8330;
+export const DEFAULT_PORT = 8321;
 
 export const BOARD_COLUMNS = [
   { id: "ideas", name: "Ideas", description: "Possibilities worth capturing" },
