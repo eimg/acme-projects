@@ -47,15 +47,26 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .brand-copy strong { font-size: 15.5px; letter-spacing: -.015em; }
 .brand-copy span { font-size: 11.5px; color: var(--muted); }
 .header-actions { display: flex; align-items: center; gap: 9px; }
-.identity-chip {
-  display: grid;
-  gap: 1px;
-  padding: 4px 10px;
-  border-left: 1px solid var(--line);
-  line-height: 1.2;
-}
-.identity-chip strong { font-size: 12px; }
-.identity-chip span { color: var(--muted); font-size: 10.5px; }
+.account-menu { position: relative; flex: 0 0 auto; }
+.account-menu[open] { z-index: 40; }
+.account-trigger { min-height: 36px; max-width: 190px; display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 5px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); box-shadow: var(--shadow-sm); cursor: pointer; list-style: none; }
+.account-trigger::-webkit-details-marker { display: none; }
+.account-trigger::after { content: ""; width: 5px; height: 5px; margin: 0 2px 3px 3px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform 140ms ease; }
+.account-menu[open] .account-trigger::after { margin-bottom: -2px; transform: rotate(225deg); }
+.account-avatar { width: 26px; height: 26px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 7px; background: var(--teal-soft); color: var(--teal); font-size: 11px; font-weight: 800; }
+.account-trigger-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
+.account-popover { position: absolute; top: calc(100% + 9px); right: 0; width: 252px; padding: 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper); box-shadow: var(--shadow-md); }
+.account-heading { display: grid; gap: 2px; padding: 8px 9px 11px; border-bottom: 1px solid var(--line); }
+.account-heading strong { overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.account-heading span { color: var(--muted); font-size: 10.5px; }
+.account-context { margin: 9px 0; padding: 9px; border-radius: 9px; background: var(--paper-soft); display: flex; align-items: center; gap: 9px; }
+.account-context > div { display: grid; gap: 2px; }
+.account-context strong { font-size: 12px; }
+.account-context div span { color: var(--muted); font-size: 10.5px; }
+.account-status { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--teal); box-shadow: 0 0 0 3px rgba(30,111,104,.12); }
+.account-status.development { background: var(--gold); box-shadow: 0 0 0 3px rgba(244,184,96,.2); }
+.account-action { width: 100%; min-height: 34px; padding: 8px 9px; border: 0; border-radius: 8px; background: transparent; display: flex; align-items: center; justify-content: space-between; color: var(--ink); text-decoration: none; font-size: 12px; text-align: left; cursor: pointer; }
+.account-action:hover { background: var(--teal-soft); color: var(--teal-dark); }
 
 .auth-page { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
 .auth-card {
@@ -506,6 +517,7 @@ input:focus, textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px v
 @media (max-width: 560px) {
   .app-header { padding: 0 13px; }
   .brand-copy span { display: none; }
+  .account-trigger-name { display: none; }
   .board-header { min-height: 104px; padding: 17px; align-items: flex-start; }
   .board-header h1 { font-size: 21px; }
   .board-meta { display: none; }

@@ -53,6 +53,12 @@ mutate. The API and UI check permission strings rather than role names, so
 future custom roles work without code changes. The built-in `viewer` is
 read-only, while `member`, `operator`, and `admin` can edit boards.
 
+The rightmost account menu shows the current principal and whether Projects is
+using local Identity or off-mode development access. In local mode it links to
+the Identity account and contains sign-out. Signing out invalidates the shared
+central browser session for the other Identity-backed apps on the same
+hostname; off mode has no session to clear.
+
 When Acme Issues also runs with local auth, mint a narrowly scoped service token
 containing `issues.write`, then provide it to Projects:
 

@@ -81,7 +81,14 @@ export function createApp({
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
   app.get("/api/auth/session", authenticateRequests(principalResolver, authMode), (_req, res) => {
-    res.json({ schemaVersion: "acme.session.v1", authMode, principal: principalFrom(res) });
+    res.json({
+      schemaVersion: "acme.session.v1",
+      authMode,
+      accountUrl: authMode === "local"
+        ? `${identityBaseUrl().replace(/\/$/, "")}/?tab=account`
+        : undefined,
+      principal: principalFrom(res),
+    });
   });
   app.post("/api/auth/session", async (req, res) => {
     await proxyIdentitySession(identityFetchFn, req, res, "POST");

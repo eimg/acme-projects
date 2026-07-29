@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Board, Card, CardComment, ColumnId, Project } from "../../src/types";
 import { hasPermission } from "acme-identity/permissions";
@@ -10,6 +10,7 @@ type Dialog = "project" | "edit-project" | "card" | null;
 type AuthSession = {
   schemaVersion: "acme.session.v1";
   authMode: AuthMode;
+  accountUrl?: string;
   principal: Principal;
 };
 
@@ -21,6 +22,21 @@ type ProjectsAuth = {
 };
 
 const ProjectsAuthContext = createContext<ProjectsAuth | null>(null);
+
+function useOutsideDismissDetails() {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const dismiss = (event: MouseEvent) => {
+      const menu = ref.current;
+      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) {
+        menu.open = false;
+      }
+    };
+    document.addEventListener("mousedown", dismiss);
+    return () => document.removeEventListener("mousedown", dismiss);
+  }, []);
+  return ref;
+}
 
 function useProjectsAuth(): ProjectsAuth {
   const value = useContext(ProjectsAuthContext);
@@ -218,6 +234,7 @@ function AuthenticatedApp() {
 
 function Header({ onNewProject }: { onNewProject?: () => void }) {
   const { session, signOut, signingOut } = useProjectsAuth();
+  const accountMenuRef = useOutsideDismissDetails();
   return (
     <header className="app-header">
       <div className="brand">
@@ -228,16 +245,36 @@ function Header({ onNewProject }: { onNewProject?: () => void }) {
         </div>
       </div>
       <div className="header-actions">
-        <div className="identity-chip" title={session.principal.permissions.join(", ")}>
-          <strong>{session.principal.displayName}</strong>
-          <span>{session.principal.roles.join(", ") || session.principal.kind}</span>
-        </div>
-        {session.authMode === "local" && (
-          <button className="button ghost" disabled={signingOut} onClick={signOut}>Sign out</button>
-        )}
         {onNewProject && <button className="button primary" onClick={onNewProject}>
         <PlusIcon /> New project
         </button>}
+        <details className="account-menu" ref={accountMenuRef}>
+          <summary className="account-trigger" aria-label={`Account: ${session.principal.displayName}`}>
+            <span className="account-avatar" aria-hidden="true">{session.principal.displayName.charAt(0).toUpperCase()}</span>
+            <span className="account-trigger-name">{session.principal.displayName}</span>
+          </summary>
+          <div className="account-popover">
+            <div className="account-heading">
+              <strong>{session.principal.displayName}</strong>
+              <span>@{session.principal.username}</span>
+            </div>
+            <div className="account-context">
+              <span className={`account-status ${session.authMode === "off" ? "development" : "connected"}`} />
+              <div>
+                <strong>{session.authMode === "off" ? "Authentication off" : "Acme Identity"}</strong>
+                <span>{session.authMode === "off" ? "Development admin access" : session.principal.roles.join(", ") || session.principal.kind}</span>
+              </div>
+            </div>
+            {session.accountUrl && (
+              <a className="account-action" href={session.accountUrl} target="_blank" rel="noreferrer">
+                My identity account <span aria-hidden="true">↗</span>
+              </a>
+            )}
+            {session.authMode === "local" && (
+              <button className="account-action" type="button" disabled={signingOut} onClick={signOut}>Sign out</button>
+            )}
+          </div>
+        </details>
       </div>
     </header>
   );
