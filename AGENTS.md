@@ -2,6 +2,8 @@
 
 Acme Projects is a local board for collaborative feature exploration. It is intentionally not a general project-management platform. Its current integration slice creates non-triggering linked issues in Acme Issues; it does not call Helix directly.
 
+Treat the Acme suite as an executable reference architecture, not a universal platform. Preserve Projects' local operation, focused ownership, and replaceable public seam; add breadth to demonstrate collaborative exploration, not to anticipate every organization's project-management needs.
+
 ## Related projects
 
 | Project | Local path | Responsibility |
