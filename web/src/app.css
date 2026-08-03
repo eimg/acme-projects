@@ -500,12 +500,99 @@ input:focus, textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px v
   box-shadow: var(--shadow-md);
 }
 
+.sidebar-connection {
+  margin-top: 8px;
+}
+
+.connections-view {
+  max-width: 820px;
+  padding: 0 0 28px;
+}
+
+.connections-header {
+  margin-bottom: 16px;
+}
+
+.connection-card {
+  margin: 0 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.connection-heading h2 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 18px;
+}
+
+.connection-note,
+.connection-detail,
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.connection-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.connection-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12.5px;
+}
+
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  background: rgba(38, 50, 47, 0.08);
+  color: var(--muted);
+}
+
+.connection-status.online {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.connection-status.offline {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 850px) {
   .workspace { grid-template-columns: 1fr; }
   .project-sidebar { min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; }
   .sidebar-heading, .sidebar-note { display: none; }
   .project-list { flex-direction: row; overflow-x: auto; }
   .project-link { min-width: 185px; }
+  .sidebar-connection { margin-top: 0; min-width: 185px; }
   .board-scroll { height: calc(100dvh - 241px); }
   .card-detail { grid-template-columns: 1fr; }
   .card-edit { border-right: 0; }

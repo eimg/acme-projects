@@ -48,9 +48,20 @@ import {
 } from "./auth.js";
 import { identityBaseUrl, type AuthMode } from "acme-identity/client";
 import {
-  createSteeringNotifier, ensureSteeringDecisionStore, listSteeringDecisions,
-  parseSteeringActionRequest, parseSteeringDecisionNotice, recordSteeringDecision,
-  type SteeringActionReceipt, type SteeringNotification,
+  clearSteeringUrl,
+  createSteeringNotifier,
+  ensureSteeringDecisionStore,
+  listSteeringDecisions,
+  parseSteeringActionRequest,
+  parseSteeringDecisionNotice,
+  probeSteeringIntegration,
+  recordSteeringDecision,
+  resolveSteeringConfig,
+  setSteeringUrl,
+  steeringEnvironmentFromProcess,
+  type SteeringActionReceipt,
+  type SteeringEnvironmentConfig,
+  type SteeringNotification,
 } from "./steering.js";
 
 const columnIds = new Set<string>(BOARD_COLUMNS.map((column) => column.id));
@@ -64,6 +75,7 @@ export function createApp({
   authMode = resolveAuthMode(),
   issuesToken = process.env.ACME_ISSUES_TOKEN,
   trustedIssuesOrigins,
+  steeringEnvironment = steeringEnvironmentFromProcess(),
 }: {
   db: Database.Database;
   fetchFn?: FetchFn;
@@ -72,10 +84,11 @@ export function createApp({
   authMode?: AuthMode;
   issuesToken?: string;
   trustedIssuesOrigins?: string[];
+  steeringEnvironment?: SteeringEnvironmentConfig;
 }): Express {
   const app = express();
   ensureSteeringDecisionStore(db);
-  const notifySteering = createSteeringNotifier(fetchFn);
+  const notifySteering = createSteeringNotifier(fetchFn, () => resolveSteeringConfig(db, steeringEnvironment));
   app.use("/api", (_req, res, next) => {
     res.setHeader("cache-control", "no-store");
     res.setHeader("x-content-type-options", "nosniff");
@@ -104,6 +117,24 @@ export function createApp({
     await proxyIdentitySession(identityFetchFn, req, res, "DELETE");
   });
   app.use("/api", authenticateRequests(principalResolver, authMode), authorizeProjectsRequest);
+  app.get("/api/integrations/steering", async (_req, res) => {
+    res.json(await probeSteeringIntegration(db, fetchFn, steeringEnvironment));
+  });
+  app.patch("/api/integrations/steering", async (req, res) => {
+    if (req.body?.url !== null && typeof req.body?.url !== "string") {
+      return res.status(400).json({ error: "url must be a string or null" });
+    }
+    try {
+      if (req.body.url === null) clearSteeringUrl(db);
+      else setSteeringUrl(db, req.body.url);
+      return res.json(await probeSteeringIntegration(db, fetchFn, steeringEnvironment));
+    } catch (error) {
+      return res.status(400).json({ error: errorMessage(error) });
+    }
+  });
+  app.post("/api/integrations/steering/test", async (_req, res) => {
+    res.json(await probeSteeringIntegration(db, fetchFn, steeringEnvironment));
+  });
   app.post("/api/steering/actions", async (req, res) => {
     const action = parseSteeringActionRequest(req.body);
     if (!action) return res.status(400).json({ error: "Invalid acme.steering.action.v1 payload" });

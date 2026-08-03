@@ -6,6 +6,19 @@ import type { AuthMode, Principal } from "acme-identity/types";
 import { api, formatTime } from "./api";
 
 type Dialog = "project" | "edit-project" | "card" | null;
+type WorkspaceView = "board" | "connections";
+
+type SteeringIntegrationStatus = {
+  configured: boolean;
+  url: string;
+  source: "stored" | "environment" | "unconfigured";
+  status: "online" | "offline" | "unconfigured";
+  detail: string;
+  checkedAt: string;
+  credentialConfigured: boolean;
+  credentialWillBeSent: boolean;
+  startupConfigured: boolean;
+};
 
 type AuthSession = {
   schemaVersion: "acme.session.v1";
@@ -96,6 +109,7 @@ function AuthenticatedApp() {
   });
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [view, setView] = useState<WorkspaceView>("board");
   const [newCardColumn, setNewCardColumn] = useState<ColumnId>("ideas");
   const [toast, setToast] = useState("");
 
@@ -141,11 +155,18 @@ function AuthenticatedApp() {
         <ProjectSidebar
           projects={projects.data ?? []}
           selectedId={selectedProjectId}
-          onSelect={setSelectedProjectId}
+          view={view}
+          onSelect={(id) => {
+            setSelectedProjectId(id);
+            setView("board");
+          }}
+          onConnections={() => setView("connections")}
           onNew={canWrite ? () => setDialog("project") : undefined}
         />
         <main className="main-content">
-          {projects.isLoading ? (
+          {view === "connections" ? (
+            <ConnectionsView canWrite={canWrite} onToast={showToast} />
+          ) : projects.isLoading ? (
             <CenteredMessage title="Opening your workspace…" />
           ) : !projects.data?.length ? (
             <Welcome onCreate={canWrite ? () => setDialog("project") : undefined} />
@@ -283,12 +304,16 @@ function Header({ onNewProject }: { onNewProject?: () => void }) {
 function ProjectSidebar({
   projects,
   selectedId,
+  view,
   onSelect,
+  onConnections,
   onNew,
 }: {
   projects: Project[];
   selectedId: number | null;
+  view: WorkspaceView;
   onSelect: (id: number) => void;
+  onConnections: () => void;
   onNew?: () => void;
 }) {
   return (
@@ -301,7 +326,7 @@ function ProjectSidebar({
         {projects.map((project) => (
           <button
             key={project.id}
-            className={`project-link ${project.id === selectedId ? "active" : ""}`}
+            className={`project-link ${view === "board" && project.id === selectedId ? "active" : ""}`}
             onClick={() => onSelect(project.id)}
           >
             <span className="project-initial">{project.name.slice(0, 1).toUpperCase()}</span>
@@ -312,6 +337,17 @@ function ProjectSidebar({
           </button>
         ))}
       </nav>
+      <button
+        type="button"
+        className={`project-link sidebar-connection ${view === "connections" ? "active" : ""}`}
+        onClick={onConnections}
+      >
+        <span className="project-initial">S</span>
+        <span>
+          <strong>Connections</strong>
+          <small>Steering integration</small>
+        </span>
+      </button>
       <div className="sidebar-note">
         <SparkIcon />
         <p><strong>Explore first.</strong> Ready cards can be submitted to an issues system when a human chooses.</p>
@@ -1188,6 +1224,113 @@ function Dialog({
           <button className="icon-button close-button" onClick={onClose} aria-label="Close">×</button>
         </header>
         {children}
+      </section>
+    </div>
+  );
+}
+
+function ConnectionsView({ canWrite, onToast }: { canWrite: boolean; onToast: (message: string) => void }) {
+  const queryClient = useQueryClient();
+  const connection = useQuery({
+    queryKey: ["steering-integration"],
+    queryFn: () => api<SteeringIntegrationStatus>("/api/integrations/steering"),
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  });
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    if (connection.data) setUrl(connection.data.url);
+  }, [connection.data?.url]);
+
+  const save = useMutation({
+    mutationFn: (nextUrl: string | null) => api<SteeringIntegrationStatus>("/api/integrations/steering", {
+      method: "PATCH",
+      body: JSON.stringify({ url: nextUrl }),
+    }),
+    onSuccess: async (result) => {
+      queryClient.setQueryData(["steering-integration"], result);
+      setUrl(result.url);
+      onToast(result.configured ? "Steering connection saved" : "Steering notifications disabled");
+    },
+    onError: (error: Error) => onToast(error.message),
+  });
+
+  const test = useMutation({
+    mutationFn: () => api<SteeringIntegrationStatus>("/api/integrations/steering/test", { method: "POST" }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(["steering-integration"], result);
+      onToast(result.status === "online" ? "Steering is online" : result.detail);
+    },
+    onError: (error: Error) => onToast(error.message),
+  });
+
+  const current = connection.data;
+  const changed = current !== undefined && url.trim().replace(/\/$/, "") !== current.url.replace(/\/$/, "");
+
+  return (
+    <div className="connections-view">
+      <div className="board-header connections-header">
+        <div>
+          <div className="eyebrow">Local integrations</div>
+          <h1>Connections</h1>
+          <p>Optional Acme Steering integration for Ready-card submission decisions.</p>
+        </div>
+      </div>
+      <section className="connection-card">
+        <div className="connection-heading">
+          <div>
+            <p className="eyebrow">Workflow steering</p>
+            <h2>
+              Acme Steering
+              <span className={`connection-status ${current?.status ?? "pending"}`}>
+                {connection.isLoading ? "checking" : current?.status ?? "unknown"}
+              </span>
+            </h2>
+            <p className="connection-note">
+              Projects publishes Ready-card lifecycle events and receives narrow Issues-handoff decisions through this connection.
+            </p>
+          </div>
+        </div>
+        {connection.isError ? (
+          <p className="form-error">{connection.error.message}</p>
+        ) : (
+          <div className="connection-stack">
+            <Field label="Steering URL">
+              <input
+                value={url}
+                readOnly={!canWrite}
+                placeholder="http://127.0.0.1:8323"
+                onChange={(event) => setUrl(event.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+            <p className="connection-detail">{current?.detail ?? "Checking the connection…"}</p>
+            {current?.source === "environment" && (
+              <p className="hint">Provided by startup configuration. Saving here creates a Projects-local override.</p>
+            )}
+            {current?.credentialConfigured && !current.credentialWillBeSent && current.configured && (
+              <p className="connection-warning">A service credential exists, but it will not be sent until this origin is trusted by the server configuration.</p>
+            )}
+            <p className="hint">Credentials remain server-side and cannot be viewed or changed here.</p>
+            <div className="connection-actions">
+              {canWrite && current?.source === "stored" && current.startupConfigured && (
+                <button className="button ghost" type="button" disabled={save.isPending} onClick={() => save.mutate(null)}>Use startup setting</button>
+              )}
+              {canWrite && current?.configured && (
+                <button className="button ghost" type="button" disabled={save.isPending} onClick={() => save.mutate("")}>Disable</button>
+              )}
+              <button className="button" type="button" disabled={!current?.configured || test.isPending} onClick={() => test.mutate()}>
+                {test.isPending ? "Testing…" : "Test connection"}
+              </button>
+              {canWrite && (
+                <button className="button primary" type="button" disabled={!changed || save.isPending} onClick={() => save.mutate(url)}>
+                  {save.isPending ? "Saving…" : "Save"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

@@ -83,6 +83,12 @@ function migrate(db: Database.Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_implementation_attempts_active
       ON implementation_attempts(card_id)
       WHERE status = 'issue_pending';
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `);
 
   const projectColumns = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];

@@ -37,6 +37,12 @@ describe("acme-projects API", () => {
       db,
       fetchFn: async (input, init) => {
         const url = new URL(String(input));
+        if (url.host === "steering.test" && url.pathname === "/api/health") {
+          return Response.json({ ok: true, product: "acme-steering" });
+        }
+        if (url.host === "steering.test" && url.pathname === "/api/notifications/check") {
+          return Response.json({ ok: true, product: "acme-projects" });
+        }
         const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)(?:\/(.*))?$/);
         if (!projectMatch) {
           return Response.json({ error: "Unsupported request" }, { status: 400 });
@@ -102,6 +108,33 @@ describe("acme-projects API", () => {
   it("starts empty and reports health", async () => {
     await request(app).get("/api/health").expect(200, { ok: true });
     await request(app).get("/api/projects").expect(200, []);
+  });
+
+  it("manages and tests the optional Steering connection without storing credentials", async () => {
+    const saved = await request(app)
+      .patch("/api/integrations/steering")
+      .send({ url: "http://steering.test/" })
+      .expect(200);
+    assert.equal(saved.body.url, "http://steering.test");
+    assert.equal(saved.body.source, "stored");
+    assert.equal(saved.body.status, "online");
+
+    const tested = await request(app).post("/api/integrations/steering/test").expect(200);
+    assert.equal(tested.body.status, "online");
+    assert.equal(Object.hasOwn(tested.body, "token"), false);
+
+    const disabled = await request(app)
+      .patch("/api/integrations/steering")
+      .send({ url: "" })
+      .expect(200);
+    assert.equal(disabled.body.configured, false);
+    assert.equal(disabled.body.source, "stored");
+
+    const reset = await request(app)
+      .patch("/api/integrations/steering")
+      .send({ url: null })
+      .expect(200);
+    assert.equal(reset.body.source, "unconfigured");
   });
 
   it("adds repository scope to databases created before the project binding", () => {
