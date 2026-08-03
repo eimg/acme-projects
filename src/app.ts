@@ -47,6 +47,7 @@ import {
   type PrincipalResolver,
 } from "./auth.js";
 import { identityBaseUrl, type AuthMode } from "acme-identity/client";
+import { createSteeringNotifier, parseSteeringActionRequest, type SteeringActionReceipt, type SteeringNotification } from "./steering.js";
 
 const columnIds = new Set<string>(BOARD_COLUMNS.map((column) => column.id));
 const manualColumnIds = new Set<ColumnId>(["ideas", "exploring", "ready"]);
@@ -69,6 +70,7 @@ export function createApp({
   trustedIssuesOrigins?: string[];
 }): Express {
   const app = express();
+  const notifySteering = createSteeringNotifier(fetchFn);
   app.use("/api", (_req, res, next) => {
     res.setHeader("cache-control", "no-store");
     res.setHeader("x-content-type-options", "nosniff");
@@ -97,6 +99,44 @@ export function createApp({
     await proxyIdentitySession(identityFetchFn, req, res, "DELETE");
   });
   app.use("/api", authenticateRequests(principalResolver, authMode), authorizeProjectsRequest);
+  app.post("/api/steering/actions", async (req, res) => {
+    const action = parseSteeringActionRequest(req.body);
+    if (!action) return res.status(400).json({ error: "Invalid acme.steering.action.v1 payload" });
+    if (action.actionKey !== "projects.submit_ready_card" || action.resource.type !== "card") {
+      return res.status(400).json(actionReceipt(action.requestId, "rejected", action.resource.expectedRevision, "Unsupported Projects steering action."));
+    }
+    const card = getCard(db, numberId(action.resource.id));
+    if (!card) return res.status(404).json(actionReceipt(action.requestId, "rejected", action.resource.expectedRevision, "Card not found."));
+    if (card.activeImplementation) {
+      return res.json(actionReceipt(action.requestId, "already_applied", String(card.updatedAt), "The card already has an active implementation issue."));
+    }
+    if (String(card.updatedAt) !== action.resource.expectedRevision) {
+      return res.status(409).json(actionReceipt(action.requestId, "stale", String(card.updatedAt), "The card changed before the action was applied."));
+    }
+    if (card.columnId !== "ready") {
+      return res.status(409).json(actionReceipt(action.requestId, "rejected", String(card.updatedAt), "Only a Ready card can be submitted."));
+    }
+    const project = getProject(db, card.projectId)!;
+    if (!project.issuesUrl || !project.issuesProjectRef.trim()) {
+      return res.status(409).json(actionReceipt(action.requestId, "rejected", String(card.updatedAt), "The project does not have a complete Issues destination."));
+    }
+    try {
+      const { issue, snapshot, triggerLabel, issuesProjectRef } = await createProjectIssue(fetchFn, project, card, {
+        projectsCallbackUrl: issuesLifecycleWebhookUrl(), authToken: issuesToken, trustedOrigins: trustedIssuesOrigins,
+      });
+      createImplementationAttempt(db, card.id, {
+        issueId: issue.id, issueUrl: issue.url, issuesUrl: normalizeIssuesUrl(project.issuesUrl),
+        issuesProjectRef, triggerLabel, snapshot,
+      });
+      const updated = getCard(db, card.id)!;
+      const eventId = `acme-projects:card:${updated.id}:card.issue_submitted:${updated.updatedAt}`;
+      notifySteering(cardNotification(updated, "card.issue_submitted", "Ready card submitted to Acme Issues", "resolved"));
+      return res.json({ ...actionReceipt(action.requestId, "applied", String(updated.updatedAt), "Projects created the implementation issue through Acme Issues."), eventId });
+    } catch (error) {
+      const status = error instanceof IntegrationConflict ? 409 : 502;
+      return res.status(status).json(actionReceipt(action.requestId, status === 409 ? "rejected" : "unavailable", String(card.updatedAt), errorMessage(error)));
+    }
+  });
   app.get("/api/columns", (_req, res) => res.json(BOARD_COLUMNS));
 
   app.get("/api/projects", (_req, res) => res.json(listProjects(db)));
@@ -189,11 +229,13 @@ export function createApp({
         error: "Cards can only be created in Ideas, Exploring, or Ready",
       });
     }
-    res.status(201).json(createCard(db, projectId, {
+    const card = createCard(db, projectId, {
       title,
       description: text(body.description) ?? "",
       columnId,
-    }));
+    });
+    notifySteering(cardNotification(card, "card.created", "Card created"));
+    res.status(201).json(card);
   });
 
   app.get("/api/cards/:id", (req, res) => {
@@ -243,6 +285,12 @@ export function createApp({
     }
     const card = moveCard(db, id, columnId, index);
     if (!card) return res.status(404).json({ error: "Card not found" });
+    notifySteering(cardNotification(
+      card,
+      `card.moved.${card.columnId}`,
+      `Card moved to ${BOARD_COLUMNS.find((column) => column.id === card.columnId)?.name ?? card.columnId}`,
+      card.columnId === "ready" ? "open" : "superseded",
+    ));
     res.json(card);
   });
 
@@ -302,7 +350,9 @@ export function createApp({
         triggerLabel,
         snapshot,
       });
-      res.status(201).json({ attempt, card: getCard(db, card.id) });
+      const updatedCard = getCard(db, card.id)!;
+      notifySteering(cardNotification(updatedCard, "card.issue_submitted", "Ready card submitted to Acme Issues", "resolved"));
+      res.status(201).json({ attempt, card: updatedCard });
     } catch (error) {
       const status = error instanceof IntegrationConflict ? 409 : 502;
       res.status(status).json({ error: errorMessage(error) });
@@ -318,6 +368,11 @@ export function createApp({
     }
     try {
       const result = projectIssuesLifecycle(db, payload);
+      notifySteering(cardNotification(
+        result.card,
+        `card.implementation.${payload.event}`,
+        `Implementation ${payload.event.replace("implementation.", "").replace("_", " ")}`,
+      ));
       res.status(200).json({
         ok: true,
         moved: result.moved,
@@ -360,6 +415,7 @@ export function createApp({
       );
       withdrawImplementationAttempt(db, attempt.id);
       const updated = moveCard(db, card.id, "exploring", Number.MAX_SAFE_INTEGER);
+      if (updated) notifySteering(cardNotification(updated, "card.returned_to_exploration", "Card returned to exploration", "withdrawn"));
       res.json({ attempt: { ...attempt, status: "withdrawn" }, card: updated });
     } catch (error) {
       const status = error instanceof IntegrationConflict ? 409 : 502;
@@ -394,6 +450,38 @@ export function createApp({
 
   app.get("*path", webIndex());
   return app;
+}
+
+function cardNotification(
+  card: import("./types.js").Card,
+  type: string,
+  summary: string,
+  state?: "open" | "resolved" | "withdrawn" | "superseded",
+): SteeringNotification {
+  return {
+    schemaVersion: "acme.steering.notification.v1",
+    id: `acme-projects:card:${card.id}:${type}:${card.updatedAt}`,
+    source: { product: "acme-projects", resourceType: "card", resourceId: String(card.id), revision: String(card.updatedAt) },
+    event: { type, occurredAt: new Date(card.updatedAt).toISOString(), summary, detail: card.title },
+    ...(state ? { steering: {
+      caseKey: `card:${card.id}:submit-issue`, state,
+      title: `Submit ${card.title} for implementation`,
+      action: "projects.submit_ready_card",
+      reason: "A Ready card has enough product context for the Issues handoff.",
+      proposedAction: "Create the implementation issue through the configured Acme Issues adapter.",
+      recommendation: "Submit when the card's decisions and acceptance notes are sufficient.",
+      reversible: true, facts: { ready: card.columnId === "ready" },
+    } } : {}),
+  };
+}
+
+function actionReceipt(
+  requestId: string,
+  status: SteeringActionReceipt["status"],
+  sourceRevision: string,
+  summary: string,
+): SteeringActionReceipt {
+  return { schemaVersion: "acme.steering.action-receipt.v1", requestId, status, sourceRevision, summary };
 }
 
 async function proxyIdentitySession(

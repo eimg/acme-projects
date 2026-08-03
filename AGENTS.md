@@ -69,7 +69,8 @@ The current and intended contract is documented in
 5. Preserve unrelated user changes.
 6. Before committing cross-cutting changes, run `npm run verify` (typecheck, test, and build).
 7. Keep `ACME_AUTH_MODE=off` as the standalone/test default. In `local`, gate
-   reads on `projects.read` or `projects.write`, mutations on `projects.write`,
+   reads on `projects.read` or `projects.write`, ordinary mutations on `projects.write`,
    and never branch on fixed role names. Require `projects.write` on
-   `POST /api/webhooks/issues`; machine callers use scoped bearer tokens, and
+   `POST /api/webhooks/issues` and `projects.steering.submit` only on the narrow
+   Steering action endpoint; machine callers use scoped bearer tokens, and
    outbound tokens are attached only for configured trusted Issues origins.

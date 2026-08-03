@@ -21,6 +21,7 @@ describe("Acme Projects identity permissions", () => {
     member: ["projects.write"],
     custom: ["projects.*"],
     unrelated: ["issues.write"],
+    steering: ["projects.steering.submit"],
   };
   const principalResolver = async (options: ResolveOptions): Promise<Principal> => {
     const username = options.devUser ?? "admin";
@@ -142,6 +143,16 @@ describe("Acme Projects identity permissions", () => {
       .set(HEADER, "member")
       .send({ event: "invalid" })
       .expect(400);
+  });
+
+  it("keeps the Steering submission credential narrower than ordinary board writes", async () => {
+    const action = {
+      schemaVersion: "acme.steering.action.v1", requestId: "auth-test", caseId: "case", decisionId: "decision",
+      actionKey: "projects.submit_ready_card", resource: { type: "card", id: "9999", expectedRevision: "1" },
+    };
+    await request(app).post("/api/steering/actions").set(HEADER, "member").send(action).expect(403);
+    await request(app).post("/api/steering/actions").set(HEADER, "steering").send(action).expect(404);
+    await request(app).post(`/api/projects/${projectId}/cards`).set(HEADER, "steering").send({ title: "No broad write" }).expect(403);
   });
 
   it("forwards the configured service token to authenticated Acme Issues", async () => {

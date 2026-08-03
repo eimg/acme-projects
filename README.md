@@ -153,6 +153,12 @@ Human merge / issue completed → Done
 
 Acme Projects does not call Helix directly. See [`docs/workflow-model.md`](./docs/workflow-model.md).
 
+## Optional Steering notifications
+
+Set `ACME_STEERING_URL` to publish durable card workflow transitions to Acme Steering. In shared local-auth mode, set a scoped `ACME_STEERING_TOKEN` with `steering.notify.projects`. Delivery is best-effort and never blocks board mutations. Moving a card to Ready opens a submission decision projection; submitting it directly or moving it away reconciles that case. Projects still hands implementation only to Acme Issues.
+
+Projects accepts `projects.submit_ready_card` at `POST /api/steering/actions`. The caller needs the action-specific `projects.steering.submit` permission; Projects reloads the card, checks its expected revision and Ready state, and performs the normal Issues handoff. An existing active implementation is returned as already applied.
+
 ## Commands
 
 ```bash
