@@ -165,7 +165,15 @@ function AuthenticatedApp() {
         />
         <main className="main-content">
           {view === "connections" ? (
-            <ConnectionsView canWrite={canWrite} onToast={showToast} />
+            <ConnectionsView
+              project={
+                (projects.data ?? []).find((project) => project.id === selectedProjectId)
+                ?? (projects.data ?? [])[0]
+                ?? null
+              }
+              canWrite={canWrite}
+              onToast={showToast}
+            />
           ) : projects.isLoading ? (
             <CenteredMessage title="Opening your workspace…" />
           ) : !projects.data?.length ? (
@@ -176,6 +184,7 @@ function AuthenticatedApp() {
                 project={board.data.project}
                 cardCount={board.data.columns.reduce((sum, column) => sum + column.cards.length, 0)}
                 onEdit={canWrite ? () => setDialog("edit-project") : undefined}
+                onConnections={() => setView("connections")}
                 onDelete={canWrite ? () => {
                   if (
                     confirm(
@@ -342,10 +351,10 @@ function ProjectSidebar({
         className={`project-link sidebar-connection ${view === "connections" ? "active" : ""}`}
         onClick={onConnections}
       >
-        <span className="project-initial">S</span>
+        <span className="project-initial">C</span>
         <span>
           <strong>Connections</strong>
-          <small>Steering integration</small>
+          <small>Sibling integrations</small>
         </span>
       </button>
       <div className="sidebar-note">
@@ -360,25 +369,38 @@ function BoardHeader({
   project,
   cardCount,
   onEdit,
+  onConnections,
   onDelete,
 }: {
   project: Project;
   cardCount: number;
   onEdit?: () => void;
+  onConnections?: () => void;
   onDelete?: () => void;
 }) {
+  const issuesConfigured = Boolean(project.issuesUrl && project.issuesProjectRef.trim());
   return (
     <section className="board-header">
       <div>
         <div className="eyebrow">Project board</div>
         <h1>{project.name}</h1>
         <p>{project.description || "A shared space for ideas, decisions, and implementation intent."}</p>
-        <div className={`repository-scope ${project.issuesUrl && project.issuesProjectRef ? "" : "unset"}`}>
-          <LinkIcon />
-          {project.issuesUrl && project.issuesProjectRef
-            ? `${project.issuesUrl} · ${project.issuesProjectRef}`
-            : "Connect issues system"}
-        </div>
+        {issuesConfigured ? (
+          <div className="repository-scope">
+            <LinkIcon />
+            {project.issuesUrl} · {project.issuesProjectRef}
+          </div>
+        ) : onConnections ? (
+          <button type="button" className="repository-scope unset linkish" onClick={onConnections}>
+            <LinkIcon />
+            Connect issues system
+          </button>
+        ) : (
+          <div className="repository-scope unset">
+            <LinkIcon />
+            Connect issues system
+          </div>
+        )}
         {project.repositoryPath ? (
           <div className="repository-scope">
             <RepoIcon />
@@ -388,6 +410,7 @@ function BoardHeader({
       </div>
       <div className="board-meta">
         <span>{cardCount} {cardCount === 1 ? "card" : "cards"}</span>
+        {onConnections && <button className="text-button" onClick={onConnections}>Connections</button>}
         {onEdit && <button className="text-button" onClick={onEdit}>Project settings</button>}
         {onDelete && <button className="text-button danger" onClick={onDelete}>Delete project</button>}
       </div>
@@ -595,7 +618,7 @@ function NewProjectDialog({
         </Field>
         <Field
           label="Issues system URL"
-          hint="Base URL of the issues tracker that receives Ready-card handoffs."
+          hint="Optional first-run convenience. You can change this later under Connections."
         >
           <input
             name="issuesUrl"
@@ -643,8 +666,6 @@ function ProjectSettingsDialog({
       name: string;
       description: string;
       repositoryPath: string;
-      issuesUrl: string;
-      issuesProjectRef: string;
     }) =>
       api<Project>(`/api/projects/${project.id}`, {
         method: "PATCH",
@@ -661,7 +682,7 @@ function ProjectSettingsDialog({
   return (
     <Dialog
       title="Project settings"
-      subtitle="Define the shared scope inherited by every card."
+      subtitle="Local identity for this board. Configure Acme Issues under Connections."
       onClose={onClose}
     >
       <form
@@ -673,35 +694,11 @@ function ProjectSettingsDialog({
             name: String(data.get("name")),
             description: String(data.get("description")),
             repositoryPath: String(data.get("repositoryPath")),
-            issuesUrl: String(data.get("issuesUrl")),
-            issuesProjectRef: String(data.get("issuesProjectRef")),
           });
         }}
       >
         <Field label="Project name">
           <input name="name" defaultValue={project.name} autoFocus required />
-        </Field>
-        <Field
-          label="Issues system URL"
-          hint="Submitting a Ready card creates a non-triggering issue here. Helix runs in the Helix serve workspace."
-        >
-          <input
-            name="issuesUrl"
-            type="url"
-            defaultValue={project.issuesUrl}
-            placeholder="http://127.0.0.1:8320"
-          />
-        </Field>
-        <Field
-          label="Issues system project"
-          hint="Slug or id of the issues project that receives submitted cards."
-        >
-          <input
-            name="issuesProjectRef"
-            defaultValue={project.issuesProjectRef}
-            placeholder="default"
-            autoComplete="off"
-          />
         </Field>
         <Field label="Short description">
           <textarea name="description" rows={3} defaultValue={project.description} />
@@ -1038,7 +1035,7 @@ function ImplementationPanel({
           The run then uses the Helix instance the issues system is pointed at (its serve workspace).
         </p>
         {missing.length > 0 && (
-          <p className="configuration-warning">Set the {missing.join(" and ")} in Project settings first.</p>
+          <p className="configuration-warning">Set the {missing.join(" and ")} under Connections first.</p>
         )}
         <FormError error={error} />
         {canWrite && <button
@@ -1229,7 +1226,147 @@ function Dialog({
   );
 }
 
-function ConnectionsView({ canWrite, onToast }: { canWrite: boolean; onToast: (message: string) => void }) {
+function ConnectionsView({
+  project,
+  canWrite,
+  onToast,
+}: {
+  project: Project | null;
+  canWrite: boolean;
+  onToast: (message: string) => void;
+}) {
+  return (
+    <div className="connections-view">
+      <div className="board-header connections-header">
+        <div>
+          <div className="eyebrow">Sibling products</div>
+          <h1>Connections</h1>
+          <p>
+            Links from Acme Projects to sibling products. Issues destinations are per board;
+            Steering is shared by this Projects instance.
+          </p>
+        </div>
+      </div>
+      <div className="connections-stack">
+        {project ? (
+          <IssuesConnectionCard project={project} canWrite={canWrite} onToast={onToast} />
+        ) : (
+          <section className="connection-card">
+            <p className="eyebrow">This board</p>
+            <h2>Acme Issues</h2>
+            <p className="connection-note">Create a project first to configure its Issues handoff destination.</p>
+          </section>
+        )}
+        <SteeringConnectionCard canWrite={canWrite} onToast={onToast} />
+      </div>
+    </div>
+  );
+}
+
+function IssuesConnectionCard({
+  project,
+  canWrite,
+  onToast,
+}: {
+  project: Project;
+  canWrite: boolean;
+  onToast: (message: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [issuesUrl, setIssuesUrl] = useState(project.issuesUrl);
+  const [issuesProjectRef, setIssuesProjectRef] = useState(project.issuesProjectRef);
+
+  useEffect(() => {
+    setIssuesUrl(project.issuesUrl);
+    setIssuesProjectRef(project.issuesProjectRef);
+  }, [project.id, project.issuesUrl, project.issuesProjectRef]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api<Project>(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ issuesUrl, issuesProjectRef }),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["board", project.id] }),
+      ]);
+      onToast("Issues connection saved");
+    },
+    onError: (error: Error) => onToast(error.message),
+  });
+
+  const configured = Boolean(issuesUrl.trim() && issuesProjectRef.trim());
+  const changed =
+    issuesUrl.trim() !== project.issuesUrl.trim()
+    || issuesProjectRef.trim() !== project.issuesProjectRef.trim();
+  const status = configured ? "configured" : "unconfigured";
+
+  return (
+    <section className="connection-card">
+      <div className="connection-heading">
+        <div>
+          <p className="eyebrow">This board · {project.name}</p>
+          <h2>
+            Acme Issues
+            <span className={`connection-status ${status}`}>{status}</span>
+          </h2>
+          <p className="connection-note">
+            Submitting a Ready card creates a non-triggering issue here. Helix runs in the Helix
+            instance that Issues is pointed at.
+          </p>
+        </div>
+      </div>
+      <div className="connection-stack">
+        <Field label="Issues system URL">
+          <input
+            value={issuesUrl}
+            readOnly={!canWrite}
+            type="url"
+            placeholder="http://127.0.0.1:8320"
+            onChange={(event) => setIssuesUrl(event.target.value)}
+            autoComplete="off"
+          />
+        </Field>
+        <Field label="Issues system project" hint="Slug or id of the issues project that receives submitted cards.">
+          <input
+            value={issuesProjectRef}
+            readOnly={!canWrite}
+            placeholder="default"
+            onChange={(event) => setIssuesProjectRef(event.target.value)}
+            autoComplete="off"
+          />
+        </Field>
+        <p className="connection-detail">
+          {configured
+            ? `Ready cards will hand off to ${issuesUrl.trim()} · ${issuesProjectRef.trim()}.`
+            : "Save both an Issues URL and project ref to enable Ready-card handoffs."}
+        </p>
+        {canWrite && (
+          <div className="connection-actions">
+            <button
+              className="button primary"
+              type="button"
+              disabled={!changed || save.isPending}
+              onClick={() => save.mutate()}
+            >
+              {save.isPending ? "Saving…" : "Save Issues connection"}
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SteeringConnectionCard({
+  canWrite,
+  onToast,
+}: {
+  canWrite: boolean;
+  onToast: (message: string) => void;
+}) {
   const queryClient = useQueryClient();
   const connection = useQuery({
     queryKey: ["steering-integration"],
@@ -1269,70 +1406,61 @@ function ConnectionsView({ canWrite, onToast }: { canWrite: boolean; onToast: (m
   const changed = current !== undefined && url.trim().replace(/\/$/, "") !== current.url.replace(/\/$/, "");
 
   return (
-    <div className="connections-view">
-      <div className="board-header connections-header">
+    <section className="connection-card">
+      <div className="connection-heading">
         <div>
-          <div className="eyebrow">Local integrations</div>
-          <h1>Connections</h1>
-          <p>Optional Acme Steering integration for Ready-card submission decisions.</p>
+          <p className="eyebrow">This Projects instance</p>
+          <h2>
+            Acme Steering
+            <span className={`connection-status ${current?.status ?? "pending"}`}>
+              {connection.isLoading ? "checking" : current?.status ?? "unknown"}
+            </span>
+          </h2>
+          <p className="connection-note">
+            Optional decision inbox for Ready-card handoff cases. Shared by every board on this Projects instance.
+          </p>
         </div>
       </div>
-      <section className="connection-card">
-        <div className="connection-heading">
-          <div>
-            <p className="eyebrow">Workflow steering</p>
-            <h2>
-              Acme Steering
-              <span className={`connection-status ${current?.status ?? "pending"}`}>
-                {connection.isLoading ? "checking" : current?.status ?? "unknown"}
-              </span>
-            </h2>
-            <p className="connection-note">
-              Projects publishes Ready-card lifecycle events and receives narrow Issues-handoff decisions through this connection.
-            </p>
+      {connection.isError ? (
+        <p className="form-error">{connection.error.message}</p>
+      ) : (
+        <div className="connection-stack">
+          <Field label="Steering URL">
+            <input
+              value={url}
+              readOnly={!canWrite}
+              placeholder="http://127.0.0.1:8323"
+              onChange={(event) => setUrl(event.target.value)}
+              autoComplete="off"
+            />
+          </Field>
+          <p className="connection-detail">{current?.detail ?? "Checking the connection…"}</p>
+          {current?.source === "environment" && (
+            <p className="hint">Provided by startup configuration. Saving here creates a Projects-local override.</p>
+          )}
+          {current?.credentialConfigured && !current.credentialWillBeSent && current.configured && (
+            <p className="connection-warning">A service credential exists, but it will not be sent until this origin is trusted by the server configuration.</p>
+          )}
+          <p className="hint">Credentials remain server-side and cannot be viewed or changed here.</p>
+          <div className="connection-actions">
+            {canWrite && current?.source === "stored" && current.startupConfigured && (
+              <button className="button ghost" type="button" disabled={save.isPending} onClick={() => save.mutate(null)}>Use startup setting</button>
+            )}
+            {canWrite && current?.configured && (
+              <button className="button ghost" type="button" disabled={save.isPending} onClick={() => save.mutate("")}>Disable</button>
+            )}
+            <button className="button" type="button" disabled={!current?.configured || test.isPending} onClick={() => test.mutate()}>
+              {test.isPending ? "Testing…" : "Test connection"}
+            </button>
+            {canWrite && (
+              <button className="button primary" type="button" disabled={!changed || save.isPending} onClick={() => save.mutate(url)}>
+                {save.isPending ? "Saving…" : "Save"}
+              </button>
+            )}
           </div>
         </div>
-        {connection.isError ? (
-          <p className="form-error">{connection.error.message}</p>
-        ) : (
-          <div className="connection-stack">
-            <Field label="Steering URL">
-              <input
-                value={url}
-                readOnly={!canWrite}
-                placeholder="http://127.0.0.1:8323"
-                onChange={(event) => setUrl(event.target.value)}
-                autoComplete="off"
-              />
-            </Field>
-            <p className="connection-detail">{current?.detail ?? "Checking the connection…"}</p>
-            {current?.source === "environment" && (
-              <p className="hint">Provided by startup configuration. Saving here creates a Projects-local override.</p>
-            )}
-            {current?.credentialConfigured && !current.credentialWillBeSent && current.configured && (
-              <p className="connection-warning">A service credential exists, but it will not be sent until this origin is trusted by the server configuration.</p>
-            )}
-            <p className="hint">Credentials remain server-side and cannot be viewed or changed here.</p>
-            <div className="connection-actions">
-              {canWrite && current?.source === "stored" && current.startupConfigured && (
-                <button className="button ghost" type="button" disabled={save.isPending} onClick={() => save.mutate(null)}>Use startup setting</button>
-              )}
-              {canWrite && current?.configured && (
-                <button className="button ghost" type="button" disabled={save.isPending} onClick={() => save.mutate("")}>Disable</button>
-              )}
-              <button className="button" type="button" disabled={!current?.configured || test.isPending} onClick={() => test.mutate()}>
-                {test.isPending ? "Testing…" : "Test connection"}
-              </button>
-              {canWrite && (
-                <button className="button primary" type="button" disabled={!changed || save.isPending} onClick={() => save.mutate(url)}>
-                  {save.isPending ? "Saving…" : "Save"}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
-    </div>
+      )}
+    </section>
   );
 }
 

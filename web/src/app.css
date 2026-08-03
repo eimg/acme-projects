@@ -219,6 +219,18 @@ input[readonly], textarea[readonly] { background: var(--paper-soft); color: var(
   font-size: 9.5px;
 }
 .repository-scope.unset { color: var(--faint); font-family: inherit; }
+button.repository-scope {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+button.repository-scope:hover {
+  color: var(--teal-dark);
+  text-decoration: underline;
+}
 .repository-scope svg { width: 12px; height: 12px; flex-shrink: 0; }
 .board-meta { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 .board-scroll {
@@ -513,6 +525,12 @@ input:focus, textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px v
   margin-bottom: 16px;
 }
 
+.connections-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .connection-card {
   margin: 0 18px;
   padding: 22px;
@@ -575,6 +593,16 @@ input:focus, textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px v
 }
 
 .connection-status.offline {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.connection-status.configured {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.connection-status.unconfigured {
   color: #9a3412;
   background: #ffedd5;
 }

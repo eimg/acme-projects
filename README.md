@@ -132,8 +132,10 @@ For manual testing, open the linked issue in Acme Issues and add its configured
 trigger label (normally `trigger`). Acme Issues then uses its existing Helix
 delivery path. Submission is refused if the issues system is configured to use
 `acme-projects` as its trigger label.
-Configure the issues system URL and project (slug or id) in **Project settings**
-(repository path is optional and unused by the current Helix handoff).
+Configure the issues system URL and project (slug or id) under **Connections →
+Acme Issues** (create-project may set them for first-run convenience).
+**Project settings** owns local board identity (name, description, optional
+repository path). Repository path remains unused by the current Helix handoff.
 
 ```text
 Ready card
@@ -158,7 +160,7 @@ Acme Projects does not call Helix directly. See [`docs/workflow-model.md`](./doc
 
 ## Optional Steering notifications
 
-Set `ACME_STEERING_URL` to publish durable card workflow transitions to Acme Steering. In shared local-auth mode, set a scoped `ACME_STEERING_TOKEN` with `steering.notify.projects`. Delivery is best-effort and never blocks board mutations. Moving a card to Ready opens a submission decision projection; submitting it directly or moving it away reconciles that case. Projects still hands implementation only to Acme Issues.
+Set `ACME_STEERING_URL` (or configure the same non-secret URL under **Connections → Acme Steering**) to publish durable card workflow transitions to Acme Steering. A saved Connections value overrides the startup environment; clearing it returns to startup configuration or disables notifications. In shared local-auth mode, set a scoped `ACME_STEERING_TOKEN` with `steering.notify.projects`. Credentials remain server-side. Delivery is best-effort and never blocks board mutations. Moving a card to Ready opens a submission decision projection; submitting it directly or moving it away reconciles that case. Projects still hands implementation only to Acme Issues.
 
 The shipped reference policy classifies submission as human-required. The action contract makes deliberate future delegation possible without moving readiness ownership out of Projects or introducing a Projects → Helix shortcut.
 
@@ -213,3 +215,9 @@ acme-projects serve [--port 8321] [--host 127.0.0.1]
 | `GET` | `/api/cards/:id/comments` | List discussion |
 | `POST` | `/api/cards/:id/comments` | Add a comment |
 | `DELETE` | `/api/cards/:cardId/comments/:commentId` | Delete a comment |
+| `GET` | `/api/integrations/steering` | Probe optional Acme Steering connection |
+| `PATCH` | `/api/integrations/steering` | Set, clear, or restore the non-secret Steering URL |
+| `POST` | `/api/integrations/steering/test` | Re-probe Steering reachability and notification credential |
+| `GET` | `/api/steering/decisions` | List recorded Steering dispositions |
+| `POST` | `/api/steering/actions` | Accept a narrow Steering action (`projects.submit_ready_card`) |
+| `POST` | `/api/steering/decisions` | Record a Steering disposition notice |

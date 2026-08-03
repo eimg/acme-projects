@@ -80,6 +80,8 @@ The current and intended contract is documented in
 8. Require `projects.steering.receive` on the Steering decision endpoint. Record
    the decision durably and append one system comment without moving the card or
    bypassing the Issues handoff.
-9. Projects owns the non-secret Steering URL shown under **Connections**. A saved
-   value overrides `ACME_STEERING_URL`; clearing the override returns to startup
-   configuration. Tokens remain server-side and may be sent only to trusted origins.
+9. **Settings** owns local board identity; **Connections** owns sibling links
+   (per-board Acme Issues URL/project ref and the instance-wide Steering URL).
+   A saved Steering URL overrides `ACME_STEERING_URL`; clearing the override
+   returns to startup configuration. Tokens remain server-side and may be sent
+   only to trusted origins.
