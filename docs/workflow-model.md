@@ -3,7 +3,8 @@
 **Status:** The manual Ready-card → issues system handoff is implemented against
 the nested multi-project Issues API (`issuesUrl` + project slug/id).
 Issues → Projects lifecycle webhooks project `In progress` / `In review` /
-`Done`. Automatic triggering remains planned.
+`Done`. Optional Steering actions for Projects submission and Issues triggering
+are implemented, while the shipped reference policy keeps both human-required.
 
 With suite auth enabled, browser actions use Acme Identity sessions and
 `projects.read` / `projects.write`. Server-side calls to Acme Issues use the
@@ -46,6 +47,7 @@ preserving issue, run, continuation, PR, review, and merge lineage.
 | Feature idea, discussion, and evolving intent | Acme Projects |
 | Decisions, open questions, and acceptance notes | Acme Projects |
 | Whether the feature is ready for implementation | Acme Projects |
+| Whether Steering may invoke a valid product action | Acme Steering delegation policy; the owning product still revalidates |
 | Concrete implementation attempt | Acme Issues |
 | Helix run and repository-local agent execution | Helix |
 | Local PR record, review history, and human merge record | Acme Issues |
@@ -66,7 +68,7 @@ model does not assume one card equals one issue.
 Acme Issues has successfully created the execution record and Helix has accepted
 a run.
 
-The current integration is manual:
+The default integration is manual:
 
 ```text
 Ready card
@@ -77,12 +79,14 @@ Ready card
   → authenticated Issues callback moves the card to In progress
 ```
 
-A later project-level policy may automatically request implementation when a
-card enters `Ready` through Acme Issues. The same acceptance rule still applies:
-the card moves to `In progress` only after Helix accepts the run.
+Optional Acme Steering may request the Projects submission and the later Issues
+trigger through two separate product-owned actions. The current reference policy
+requires a human for both; a later organization-specific policy may delegate
+them. The same acceptance rule still applies: the card moves to `In progress`
+only after Helix accepts the run.
 
 If issue creation or run submission fails, the card remains `Ready`, records
-no active attempt, and waits for an explicit retry. A later automatic mode must
+no active attempt, and waits for an explicit retry. Any automatic mode must
 not loop on a system-driven return to `Ready`.
 
 Once a linked issue exists, arbitrary cross-column movement is disabled. A

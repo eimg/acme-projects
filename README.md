@@ -2,7 +2,7 @@
 
 A small, local project board for exploring feature ideas collaboratively before they become implementation work.
 
-Acme Projects deliberately sits between an idea and an issue tracker. Projects define the repository scope; their cards hold an evolving description, decisions, open questions, acceptance notes, and discussion. Ready cards can be submitted manually to Acme Issues, but Acme Projects does not call Helix or trigger implementation automatically.
+Acme Projects deliberately sits between an idea and an issue tracker. Projects define the repository scope; their cards hold an evolving description, decisions, open questions, acceptance notes, and discussion. Ready cards can be submitted manually or through Acme Steering's narrow product-owned action to Acme Issues, but Acme Projects never calls Helix directly.
 
 ## Acme development testbed
 
@@ -19,6 +19,7 @@ with separate responsibilities.
 | **[Helix](https://github.com/eimg/helix)** | Agent workflow control plane that receives work and orchestrates changes. |
 | **[Acme Issues](https://github.com/eimg/acme-issues)** | Concrete issue, local PR, and review lifecycle; the implementation intermediary for Acme Projects. |
 | **[Acme Projects](https://github.com/eimg/acme-projects)** | Feature ideas, collaborative exploration, decisions, and implementation readiness for existing Helix repos. |
+| **[Acme Steering](https://github.com/eimg/acme-steering)** | Optional decision inbox and delegation policy; may invoke Projects' narrow Issues-submission action without bypassing Issues. |
 | **[Acme Todo](https://github.com/eimg/acme-todo)** | Disposable target application used for agent implementation and verification. |
 
 Acme Projects assumes a repository already exists. Brand-new project inception
@@ -142,7 +143,9 @@ Ready card
   → Acme Issues triggers Helix
 ```
 
-Automatic triggering remains planned. After Submit as issue, Acme Issues
+The default flow remains manual. Optional Steering can request submission and,
+as a separate Issues-owned decision, implementation triggering; the shipped
+reference policy requires a human for both. After submission, Acme Issues
 callbacks project the card forward:
 
 ```text
@@ -156,6 +159,8 @@ Acme Projects does not call Helix directly. See [`docs/workflow-model.md`](./doc
 ## Optional Steering notifications
 
 Set `ACME_STEERING_URL` to publish durable card workflow transitions to Acme Steering. In shared local-auth mode, set a scoped `ACME_STEERING_TOKEN` with `steering.notify.projects`. Delivery is best-effort and never blocks board mutations. Moving a card to Ready opens a submission decision projection; submitting it directly or moving it away reconciles that case. Projects still hands implementation only to Acme Issues.
+
+The shipped reference policy classifies submission as human-required. The action contract makes deliberate future delegation possible without moving readiness ownership out of Projects or introducing a Projects → Helix shortcut.
 
 Projects accepts `projects.submit_ready_card` at `POST /api/steering/actions`. The caller needs the action-specific `projects.steering.submit` permission; Projects reloads the card, checks its expected revision and Ready state, and performs the normal Issues handoff. An existing active implementation is returned as already applied.
 

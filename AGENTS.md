@@ -14,6 +14,7 @@ Treat the Acme suite as an executable reference architecture, not a universal pl
 | Helix | `~/Desktop/acme/helix` | Agent workflow control plane reached through Acme Issues for authorized implementation work. |
 | Acme Issues | `~/Desktop/acme/acme-issues` | Concrete bug, issue, local PR, and review lifecycle. |
 | Acme Projects | `~/Desktop/acme/acme-projects` | Feature ideas, collaborative exploration, decisions, and implementation intent for existing Helix repos. |
+| Acme Steering | `~/Desktop/acme/acme-steering` | Optional decision inbox and delegation-policy coordinator; may invoke only Projects' narrow Issues-submission action. |
 | Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application for agent implementation and verification. |
 
 Acme Projects assumes a repository already exists. Brand-new project inception belongs to Prelude until a Helix-ready workspace has been bootstrapped.
@@ -28,14 +29,16 @@ Acme Projects assumes a repository already exists. Brand-new project inception b
   (`issuesProjectRef`) so Submit as issue targets nested
   `/api/projects/:ref/issues` routes.
 - The fixed flow is `Ideas → Exploring → Ready → In progress → In review → Done`.
-- `Ready` is the implementation handoff boundary. The current manual **Submit
+- `Ready` is the implementation handoff boundary. The default manual **Submit
   as issue** action creates an `acme-projects` issue without Acme Issues'
   configured trigger label.
 - Acme Projects does not call Helix directly. It requests a thin linked
   implementation issue from Acme Issues, which triggers Helix and owns the PR
   lifecycle.
-- A human currently adds the configured trigger label in Acme Issues. Automatic
-  triggering remains planned. Lifecycle projection is implemented via Issues →
+- A human normally adds the configured trigger label in Acme Issues. Optional
+  Steering can request Projects submission and Issues triggering only through
+  their separate public actions; both remain human-authorized in the current
+  reference policy. Lifecycle projection is implemented via Issues →
   Projects webhooks: run started → `In progress`, PR registered → `In review`,
   merge/close → `Done`.
 - Manual moves are limited to Ideas, Exploring, and Ready. A linked issue locks
