@@ -61,6 +61,14 @@ export function authorizeProjectsRequest(req: Request, res: Response, next: Next
     res.status(403).json({ error: "Missing permission: projects.steering.submit" });
     return;
   }
+  if (req.method === "POST" && req.path === "/steering/decisions") {
+    if (hasPermission(principal, "projects.steering.receive")) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: "Missing permission: projects.steering.receive" });
+    return;
+  }
   if (!hasPermission(principal, "projects.write")) {
     res.status(403).json({ error: "Missing permission: projects.write" });
     return;

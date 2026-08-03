@@ -74,3 +74,6 @@ The current and intended contract is documented in
    `POST /api/webhooks/issues` and `projects.steering.submit` only on the narrow
    Steering action endpoint; machine callers use scoped bearer tokens, and
    outbound tokens are attached only for configured trusted Issues origins.
+8. Require `projects.steering.receive` on the Steering decision endpoint. Record
+   the decision durably and append one system comment without moving the card or
+   bypassing the Issues handoff.

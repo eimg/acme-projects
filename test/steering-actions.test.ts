@@ -6,7 +6,7 @@ import { after, before, it } from "node:test";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
-import { createCard, createProject } from "../src/store.js";
+import { createCard, createProject, getCard } from "../src/store.js";
 import { setPublicBaseUrl } from "../src/publicUrl.js";
 
 let dataDir: string;
@@ -38,3 +38,29 @@ it("applies and deduplicates the Ready-card submission action", async () => {
   const duplicate = await request(app).post("/api/steering/actions").send(body).expect(200);
   assert.equal(duplicate.body.status, "already_applied");
 });
+
+it("records a Steering disposition while Projects retains workflow ownership", async () => {
+  const project = createProject(db, { name: "Decision project" });
+  const card = createCard(db, project.id, { title: "Revise intent", columnId: "ready" });
+  const app = createApp({ db });
+  const body = decisionBody("projects.submit_ready_card", "card", String(card.id), String(card.updatedAt));
+  await request(app).post("/api/steering/decisions").send(body).expect(202).expect(({ body: receipt }) => assert.equal(receipt.status, "recorded"));
+  await request(app).post("/api/steering/decisions").send(body).expect(200).expect(({ body: receipt }) => assert.equal(receipt.status, "already_recorded"));
+  const listed = await request(app).get(`/api/steering/decisions?resourceType=card&resourceId=${card.id}`).expect(200);
+  assert.equal(listed.body.items[0].resolution, "request_revision");
+  assert.equal(getCard(db, card.id)?.columnId, "ready");
+  const comments = await request(app).get(`/api/cards/${card.id}/comments`).expect(200);
+  assert.equal(comments.body.length, 1);
+  assert.match(comments.body[0].body, /Steering decision: request revision/);
+  assert.match(comments.body[0].body, /Clarify the acceptance context/);
+});
+
+function decisionBody(actionKey: string, type: string, id: string, expectedRevision: string) {
+  return {
+    schemaVersion: "acme.steering.decision.v1", decisionId: `decision-${id}`, caseId: `case-${id}`,
+    actionKey, resolution: "request_revision", rationale: "Clarify the acceptance context.",
+    decidedAt: "2026-08-03T00:00:00.000Z",
+    actor: { id: "identity:admin", issuer: "acme-identity", username: "admin", displayName: "Administrator", kind: "human" },
+    resource: { type, id, expectedRevision },
+  };
+}

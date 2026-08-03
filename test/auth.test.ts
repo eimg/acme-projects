@@ -22,6 +22,7 @@ describe("Acme Projects identity permissions", () => {
     custom: ["projects.*"],
     unrelated: ["issues.write"],
     steering: ["projects.steering.submit"],
+    receiver: ["projects.steering.receive"],
   };
   const principalResolver = async (options: ResolveOptions): Promise<Principal> => {
     const username = options.devUser ?? "admin";
@@ -153,6 +154,9 @@ describe("Acme Projects identity permissions", () => {
     await request(app).post("/api/steering/actions").set(HEADER, "member").send(action).expect(403);
     await request(app).post("/api/steering/actions").set(HEADER, "steering").send(action).expect(404);
     await request(app).post(`/api/projects/${projectId}/cards`).set(HEADER, "steering").send({ title: "No broad write" }).expect(403);
+    await request(app).post("/api/steering/decisions").set(HEADER, "steering").send({}).expect(403);
+    await request(app).post("/api/steering/decisions").set(HEADER, "receiver").send({}).expect(400);
+    await request(app).post("/api/steering/actions").set(HEADER, "receiver").send(action).expect(403);
   });
 
   it("forwards the configured service token to authenticated Acme Issues", async () => {

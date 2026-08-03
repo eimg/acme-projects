@@ -159,6 +159,8 @@ Set `ACME_STEERING_URL` to publish durable card workflow transitions to Acme Ste
 
 Projects accepts `projects.submit_ready_card` at `POST /api/steering/actions`. The caller needs the action-specific `projects.steering.submit` permission; Projects reloads the card, checks its expected revision and Ready state, and performs the normal Issues handoff. An existing active implementation is returned as already applied.
 
+Every Steering disposition is independently accepted at `POST /api/steering/decisions` with `projects.steering.receive`, recorded in Projects' durable decision ledger, and appended once as a system comment on the card. The ledger is also queryable at `GET /api/steering/decisions`. Receipt does not move the card or create an issue. Projects owns the deterministic response to reject, request revision, defer, or escalation; approval may separately invoke the narrow submission action above.
+
 ## Commands
 
 ```bash

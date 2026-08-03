@@ -47,7 +47,11 @@ import {
   type PrincipalResolver,
 } from "./auth.js";
 import { identityBaseUrl, type AuthMode } from "acme-identity/client";
-import { createSteeringNotifier, parseSteeringActionRequest, type SteeringActionReceipt, type SteeringNotification } from "./steering.js";
+import {
+  createSteeringNotifier, ensureSteeringDecisionStore, listSteeringDecisions,
+  parseSteeringActionRequest, parseSteeringDecisionNotice, recordSteeringDecision,
+  type SteeringActionReceipt, type SteeringNotification,
+} from "./steering.js";
 
 const columnIds = new Set<string>(BOARD_COLUMNS.map((column) => column.id));
 const manualColumnIds = new Set<ColumnId>(["ideas", "exploring", "ready"]);
@@ -70,6 +74,7 @@ export function createApp({
   trustedIssuesOrigins?: string[];
 }): Express {
   const app = express();
+  ensureSteeringDecisionStore(db);
   const notifySteering = createSteeringNotifier(fetchFn);
   app.use("/api", (_req, res, next) => {
     res.setHeader("cache-control", "no-store");
@@ -136,6 +141,32 @@ export function createApp({
       const status = error instanceof IntegrationConflict ? 409 : 502;
       return res.status(status).json(actionReceipt(action.requestId, status === 409 ? "rejected" : "unavailable", String(card.updatedAt), errorMessage(error)));
     }
+  });
+  app.post("/api/steering/decisions", (req, res) => {
+    const notice = parseSteeringDecisionNotice(req.body);
+    if (!notice) return res.status(400).json({ error: "Invalid acme.steering.decision.v1 payload" });
+    if (notice.actionKey !== "projects.submit_ready_card" || notice.resource.type !== "card") {
+      return res.status(400).json({ error: "Unsupported Projects Steering decision" });
+    }
+    const card = getCard(db, numberId(notice.resource.id));
+    if (!card) return res.status(404).json({ error: "Card not found" });
+    const receipt = db.transaction(() => {
+      const recorded = recordSteeringDecision(db, notice, String(card.updatedAt));
+      if (recorded.status === "recorded" || recorded.status === "stale") {
+        createComment(db, card.id, {
+          author: "Acme Steering",
+          body: steeringDecisionComment(notice, recorded.status),
+        });
+      }
+      return recorded;
+    })();
+    return res.status(receipt.status === "recorded" ? 202 : receipt.status === "already_recorded" ? 200 : 409).json(receipt);
+  });
+  app.get("/api/steering/decisions", (req, res) => {
+    const resourceType = typeof req.query.resourceType === "string" ? req.query.resourceType.trim() : "";
+    const resourceId = typeof req.query.resourceId === "string" ? req.query.resourceId.trim() : "";
+    if (!resourceType || !resourceId) return res.status(400).json({ error: "resourceType and resourceId are required" });
+    return res.json({ items: listSteeringDecisions(db, resourceType, resourceId) });
   });
   app.get("/api/columns", (_req, res) => res.json(BOARD_COLUMNS));
 
@@ -482,6 +513,19 @@ function actionReceipt(
   summary: string,
 ): SteeringActionReceipt {
   return { schemaVersion: "acme.steering.action-receipt.v1", requestId, status, sourceRevision, summary };
+}
+
+function steeringDecisionComment(
+  notice: import("./steering.js").SteeringDecisionNotice,
+  status: "recorded" | "stale",
+): string {
+  const resolution = notice.resolution.replaceAll("_", " ");
+  return [
+    `Steering decision: ${resolution}${status === "stale" ? " (received after the card changed)" : ""}.`,
+    notice.rationale ? `Rationale: ${notice.rationale}` : undefined,
+    `Decided by ${notice.actor.displayName}. Decision ${notice.decisionId}.`,
+    "Acme Projects retains ownership of the next workflow transition.",
+  ].filter(Boolean).join("\n\n");
 }
 
 async function proxyIdentitySession(
