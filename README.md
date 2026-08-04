@@ -20,6 +20,7 @@ with separate responsibilities.
 | **[Acme Issues](https://github.com/eimg/acme-issues)** | Concrete issue, local PR, and review lifecycle; the implementation intermediary for Acme Projects. |
 | **[Acme Projects](https://github.com/eimg/acme-projects)** | Feature ideas, collaborative exploration, decisions, and implementation readiness for existing Helix repos. |
 | **[Acme Steering](https://github.com/eimg/acme-steering)** | Optional decision inbox and delegation policy; may invoke Projects' narrow Issues-submission action without bypassing Issues. |
+| **[Acme Intel](https://github.com/eimg/acme-intel)** | Optional think-lab; does not currently study Projects directly and must not mutate cards. |
 | **[Acme Todo](https://github.com/eimg/acme-todo)** | Disposable target application used for agent implementation and verification. |
 
 Acme Projects assumes a repository already exists. Brand-new project inception

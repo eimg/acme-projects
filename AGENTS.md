@@ -15,6 +15,7 @@ Treat the Acme suite as an executable reference architecture, not a universal pl
 | Acme Issues | `~/Desktop/acme/acme-issues` | Concrete bug, issue, local PR, and review lifecycle. |
 | Acme Projects | `~/Desktop/acme/acme-projects` | Feature ideas, collaborative exploration, decisions, and implementation intent for existing Helix repos. |
 | Acme Steering | `~/Desktop/acme/acme-steering` | Optional decision inbox and delegation-policy coordinator; may invoke only Projects' narrow Issues-submission action. |
+| Acme Intel | `~/Desktop/acme/acme-intel` | Optional think-lab; does not currently study Projects directly and must not mutate cards. |
 | Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application for agent implementation and verification. |
 
 Acme Projects assumes a repository already exists. Brand-new project inception belongs to Prelude until a Helix-ready workspace has been bootstrapped.
