@@ -72,7 +72,8 @@ The current and intended contract is documented in
 4. Keep the visual style light and distinct while retaining the typography and compact spacing conventions shared with Acme Issues.
 5. Preserve unrelated user changes.
 6. Before committing cross-cutting changes, run `npm run verify` (typecheck, test, and build).
-7. Keep `ACME_AUTH_MODE=off` as the standalone/test default. In `local`, gate
+7. Keep `ACME_AUTH_MODE=off` as the standalone/test default. In `local`, resolve
+   principals through the plain-HTTP Acme Identity adapter (`ACME_IDENTITY_URL`), gate
    reads on `projects.read` or `projects.write`, ordinary mutations on `projects.write`,
    and never branch on fixed role names. Require `projects.write` on
    `POST /api/webhooks/issues` and `projects.steering.submit` only on the narrow

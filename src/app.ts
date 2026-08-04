@@ -42,11 +42,15 @@ import {
   authenticateRequests,
   authorizeProjectsRequest,
   authMode as resolveAuthMode,
+  authRequest,
+  createAuthAdapterFromEnv,
+  handleSessionSignIn,
+  handleSessionSignOut,
   principalFrom,
   sameOriginWrites,
-  type PrincipalResolver,
+  type AuthMode,
+  type ProjectsAuthAdapter,
 } from "./auth.js";
-import { identityBaseUrl, type AuthMode } from "acme-identity/client";
 import {
   clearSteeringUrl,
   createSteeringNotifier,
@@ -71,7 +75,7 @@ export function createApp({
   db,
   fetchFn = fetch,
   identityFetchFn = fetch,
-  principalResolver,
+  authAdapter,
   authMode = resolveAuthMode(),
   issuesToken = process.env.ACME_ISSUES_TOKEN,
   trustedIssuesOrigins,
@@ -80,7 +84,7 @@ export function createApp({
   db: Database.Database;
   fetchFn?: FetchFn;
   identityFetchFn?: typeof fetch;
-  principalResolver?: PrincipalResolver;
+  authAdapter?: ProjectsAuthAdapter;
   authMode?: AuthMode;
   issuesToken?: string;
   trustedIssuesOrigins?: string[];
@@ -88,6 +92,7 @@ export function createApp({
 }): Express {
   const app = express();
   ensureSteeringDecisionStore(db);
+  const resolvedAuthAdapter = authAdapter ?? createAuthAdapterFromEnv(authMode, { identityFetchFn });
   const notifySteering = createSteeringNotifier(fetchFn, () => resolveSteeringConfig(db, steeringEnvironment));
   app.use("/api", (_req, res, next) => {
     res.setHeader("cache-control", "no-store");
@@ -100,23 +105,21 @@ export function createApp({
   app.use(webAssets());
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
-  app.get("/api/auth/session", authenticateRequests(principalResolver, authMode), (_req, res) => {
+  app.get("/api/auth/session", authenticateRequests(resolvedAuthAdapter), (_req, res) => {
     res.json({
       schemaVersion: "acme.session.v1",
       authMode,
-      accountUrl: authMode === "local"
-        ? `${identityBaseUrl().replace(/\/$/, "")}/?tab=account`
-        : undefined,
+      accountUrl: resolvedAuthAdapter.accountUrl,
       principal: principalFrom(res),
     });
   });
   app.post("/api/auth/session", async (req, res) => {
-    await proxyIdentitySession(identityFetchFn, req, res, "POST");
+    await handleSessionSignIn(resolvedAuthAdapter, req.body, authRequest(req), res);
   });
   app.delete("/api/auth/session", async (req, res) => {
-    await proxyIdentitySession(identityFetchFn, req, res, "DELETE");
+    await handleSessionSignOut(resolvedAuthAdapter, authRequest(req), res);
   });
-  app.use("/api", authenticateRequests(principalResolver, authMode), authorizeProjectsRequest);
+  app.use("/api", authenticateRequests(resolvedAuthAdapter), authorizeProjectsRequest);
   app.get("/api/integrations/steering", async (_req, res) => {
     res.json(await probeSteeringIntegration(db, fetchFn, steeringEnvironment));
   });
@@ -557,33 +560,6 @@ function steeringDecisionComment(
     `Decided by ${notice.actor.displayName}. Decision ${notice.decisionId}.`,
     "Acme Projects retains ownership of the next workflow transition.",
   ].filter(Boolean).join("\n\n");
-}
-
-async function proxyIdentitySession(
-  fetchFn: typeof fetch,
-  req: express.Request,
-  res: express.Response,
-  method: "POST" | "DELETE",
-): Promise<void> {
-  try {
-    const response = await fetchFn(`${identityBaseUrl()}/api/session`, {
-      method,
-      headers: {
-        ...(method === "POST" ? { "content-type": "application/json" } : {}),
-        ...(req.headers.cookie ? { cookie: req.headers.cookie } : {}),
-      },
-      body: method === "POST" ? JSON.stringify(req.body ?? {}) : undefined,
-      signal: AbortSignal.timeout(3_000),
-    });
-    const cookie = response.headers.get("set-cookie");
-    if (cookie) res.setHeader("set-cookie", cookie);
-    const body = await response.json().catch(() => ({ error: response.statusText }));
-    res.status(response.status).json(body);
-  } catch (error) {
-    res.status(503).json({
-      error: error instanceof Error ? error.message : "Identity service unavailable",
-    });
-  }
 }
 
 export function startServer({

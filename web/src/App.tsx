@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Board, Card, CardComment, ColumnId, Project } from "../../src/types";
-import { hasPermission } from "acme-identity/permissions";
-import type { AuthMode, Principal } from "acme-identity/types";
+import { hasPermission, type AuthMode, type Principal } from "./auth";
 import { api, formatTime } from "./api";
 
 type Dialog = "project" | "edit-project" | "card" | null;

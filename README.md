@@ -13,7 +13,7 @@ with separate responsibilities.
 
 | Project | Role |
 |---|---|
-| **[Acme Identity](https://github.com/eimg/acme-identity)** | Suite auth; Projects resolves principals and enforces capability permissions. |
+| **[Acme Identity](https://github.com/eimg/acme-identity)** | Suite auth; Projects uses a plain-HTTP adapter and enforces capability permissions. |
 | **[Primer](https://github.com/eimg/primer)** | Knowledge product and fictional Acme evidence corpus; currently outside the Issues → Helix runtime loop. |
 | **[Prelude](https://github.com/eimg/prelude)** | New-project inception; drafts freeform docs and exports bootstrap artifacts before a Helix repo exists. |
 | **[Helix](https://github.com/eimg/helix)** | Agent workflow control plane that receives work and orchestrates changes. |
@@ -40,14 +40,15 @@ Open [http://127.0.0.1:8321](http://127.0.0.1:8321).
 ### Authentication and permissions
 
 Acme Projects defaults to `ACME_AUTH_MODE=off`, which resolves an admin
-development principal locally. This keeps standalone development and ordinary
-feature tests independent of Acme Identity. For real sign-in and role checks:
+development principal locally through a product-owned auth adapter (no Identity
+package dependency). This keeps standalone development and ordinary feature
+tests independent of Acme Identity. For real sign-in and role checks:
 
 ```bash
-# in ../acme-identity
+# Identity
 ACME_AUTH_MODE=local npm run dev
 
-# in this repository
+# Projects (plain HTTP to Identity)
 ACME_AUTH_MODE=local ACME_IDENTITY_URL=http://127.0.0.1:8316 npm run dev
 ```
 
