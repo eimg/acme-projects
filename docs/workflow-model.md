@@ -30,7 +30,7 @@ Acme Projects card
   → Acme Projects asks Acme Issues to create a linked implementation issue
   → human adds the trigger label in Acme Issues
   → Acme Issues triggers Helix in the project repository
-  → accepted Helix run moves the card to In progress
+  → Helix accepting the trigger moves the card to In progress
   → Helix registers the resulting PR in Acme Issues
   → PR creation moves the card to In review
   → human-recorded merge closes the implementation issue and moves the card to Done
@@ -75,7 +75,7 @@ Ready card
   → Submit as issue
   → linked issue labeled acme-projects
   → human adds trigger
-  → accepted Helix run
+  → Helix accepts the Issues trigger
   → authenticated Issues callback moves the card to In progress
 ```
 
@@ -83,7 +83,7 @@ Optional Acme Steering may request the Projects submission and the later Issues
 trigger through two separate product-owned actions. The current reference policy
 requires a human for both; a later organization-specific policy may delegate
 them. The same acceptance rule still applies: the card moves to `In progress`
-only after Helix accepts the run.
+only after Helix accepts the trigger.
 
 If issue creation or run submission fails, the card remains `Ready`, records
 no active attempt, and waits for an explicit retry. Any automatic mode must

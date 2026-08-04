@@ -40,8 +40,8 @@ Acme Projects assumes a repository already exists. Brand-new project inception b
   Steering can request Projects submission and Issues triggering only through
   their separate public actions; both remain human-authorized in the current
   reference policy. Lifecycle projection is implemented via Issues →
-  Projects webhooks: run started → `In progress`, PR registered → `In review`,
-  merge/close → `Done`.
+  Projects webhooks: Helix accepts trigger → `In progress`, PR registered →
+  `In review`, merge/close → `Done`.
 - Manual moves are limited to Ideas, Exploring, and Ready. A linked issue locks
   cross-column movement; Return to exploration closes only an open issue that
   does not yet contain the configured trigger label.

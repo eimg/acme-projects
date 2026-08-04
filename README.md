@@ -101,8 +101,8 @@ Ideas → Exploring → Ready → In progress → In review → Done
 - **Done** represents completed work.
 
 Cards can be dragged and reordered among **Ideas**, **Exploring**, and **Ready**.
-**In progress**, **In review**, and **Done** are reserved for later external
-lifecycle events. Once a card has a linked implementation issue, cross-column
+**In progress**, **In review**, and **Done** are reserved for Issues lifecycle
+projections (Helix trigger accepted, PR registered, merge/close). Once a card has a linked implementation issue, cross-column
 dragging is locked; use **Return to exploration** to close an untriggered issue
 and move the card back safely.
 
@@ -152,7 +152,7 @@ reference policy requires a human for both. After submission, Acme Issues
 callbacks project the card forward:
 
 ```text
-Helix run accepted → In progress
+Helix trigger accepted → In progress
 PR registered → In review
 Human merge / issue completed → Done
 ```
